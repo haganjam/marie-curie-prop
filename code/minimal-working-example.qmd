@@ -1,0 +1,326 @@
+---
+title: "minimal-working-example"
+format: html
+editor: source
+---
+
+This is a minimal working example for how the **AIRIAS** (*Adaptive Invasion-Risk Intelligence for Protected Areas with eDNA Surveillance*) project is envisioned to work.
+
+Consider a single protected area (e.g. "pa_1") and a single invasive species ("sp_1"). Moreover, let's consider a simple one-dimensional landscape with four grid-cells or "sites" where "site_1" is the protected area (i.e. "pa_1"):
+
+```{r}
+# create a 1-dimension landscape
+grid <- dplyr::tibble(site = paste0("site_", 1:4))
+
+# spatial location on a line
+grid$spatial_location <- runif(n = nrow(grid), 0, 10)
+
+# add protected area identity
+grid$pa <- "pa_1"
+
+# add a variable with pa_in
+grid$pa_in <- c(1, 0, 0, 0)
+
+# check these data
+head(grid)
+```
+
+This data.frame shows four sites ("site_1" to "site_4") at a numeric spatial location for "pa_1" and shows that "site_1" is within "pa_1" (i.e. pa_in == 1). The data is set-up in this way so that it is easy to estimate the influence of all grid-cells on a given protected area.
+
+Next, we define a simple dispersal kernel based on how far each grid-cell is from the focal protected area (i.e. "pa_1"). For this, we first calculate the distance between each site and the focal protected area:
+
+```{r}
+# calculate distance
+grid$dist_pa <- abs(grid$spatial_location - grid$spatial_location[grid$pa_in == 1])
+
+# check the data
+head(grid)
+```
+
+Using this distance, we define a kernel weight $K(i, p) \epsilon [0, 1]$ which describes how dispersal from grid-cell $i$ contributs to protected area $p$ if grid-cell $i$ is within protected area $p$ (otherwise, a value of 1 is given for $K(i, p)$):
+
+$$
+K(i, p) = exp(-d(i, p)/\alpha)
+$$
+
+```{r}
+# define dispersal distance alpha
+alpha <- 1.5
+
+# implement the dispersal kernel
+grid$k_ip <- with(grid,
+                  ifelse(dist_pa == 0, 1, exp(-(dist_pa/alpha))))
+
+# check the data
+head(grid)
+```
+
+The next piece of information is the probability that grid-cell $i$ is occupied by the focal species. We would typically derive this using a logistic-regression model of known presence-absence data (i.e. a kind of species distribution model). In this case, we set them manually as $\phi_i$:
+
+```{r}
+# define grid cell probability of occupancy
+grid$psi <- c(0.05, 0.2, 0.3, 0.4)
+```
+
+Using this information, we can define each cell's contribution to the risk to the focal protected area (i.e. "pa_1" in this case) as:
+
+$$
+R_{i,p} = \psi_i \cdot w_{species} \cdot w_{site} \cdot K_{i,p}
+$$
+
+Where:
+
+$\psi_i$ is the probability that a focal species is present in cell $i$ $w_{species}$ is a weight describing the potential ecological damage of the species $w_{site}$ is a weight describing the ecological value of the protected area $K_{i,p}$ is the dispersal kernel
+
+```{r}
+# set the species weight
+w_species <- 0.5
+
+# set the site weight
+w_site <- 0.8
+
+# calculate the risk values for each cell
+grid$R <- with(grid,
+               psi * w_species * w_site * k_ip)
+
+# check the output
+head(grid)
+```
+
+From this, we can calculate the overall risk score for the focal protected area (i.e. "pa_1") as:
+
+$$
+R^{tot}_{p} = \sum R_{i,p}
+$$
+
+```{r}
+# calculate the overall risk score for pa_1
+sum(grid$R)
+```
+
+The **Expected Value of Sampling** quantifies the change in risk associated with sampling (detection or non-detection) a given cell ($s$). It can be written as follows:
+
+$$
+\text{EVS}(s) = |\sum R_{i,p}(\text{after sampling }s) - \sum R_{i,p}(\text{current})|
+$$
+
+If the total risk ($\sum R_{i,p}(\text{after sampling }s)$) after sampling $s$ is substantially different from the total risk before sampling $s$ ($\sum R_{i,p}(\text{current})$), then we have gained considerable *information* by sampling $s$. In such a case, the $\text{EVS}(s)$ would be high.
+
+If we do this for each grid-cell, we can produce a map of where sampling would lead to the greatest information gain. More information about risks will lead to better management outcomes.
+
+Note that for this calculation, the *after sampling* value is only based on changing the $psi_i$, the probability that a focal species is present in cell $i$. This updated, posterior probability is based on the following observation model:
+
+**Observation model:**
+
+The following calculations are based on an **observation model** of how airborne eDNA detections ($y_{ij}$) in sample $j$ and in grid-cell $i$ translate to the probability of detection ($p_{ij}$):
+
+$$
+y_{ij} \sim Bernoulli(p_{ij})
+$$ $$
+p_{ij} = z_i \times (1 - \theta^{FN}_{field}) \times (1 - \theta^{FN}_{lab}) + (1 - z_i) \times \theta^{FP}_{lab}
+$$ Where:
+
+$z_i$: true presence (1) or true absence (0)
+
+$\theta^{FN}_{field}$ false negative rate in the field (i.e. non-detection when species is present). Therefore, 1 - $\theta^{FN}_{field}$ is the true positive rate in the field (i.e. the probability that a species is detected when it is present).
+
+$\theta^{FN}_{lab}$ false negative rate in the lab (i.e. non-detection when species is present in the sample). Therefore, 1 - $\theta^{FN}_{lab}$ is the true positive rate in the lab (i.e. the probability that a species is detected following PCR when its DNA is present).
+
+$\theta^{FP}_{lab}$ false positive rate in the lab (i.e. detection when species is absent from the sample which can occur via, for example, contamination).
+
+**Bayesian updating**
+
+With this as our underlying observational process model, we can use Bayesian updating to determine how the occupancy probability and, therefore, the risk score would change if we collected an airborne eDNA sample for a given grid-cell. Specifically, consider grid-cell $s$ and the let the prior probability that species A is present be $psi_s$. This prior probability is derived from a species distribution model based on known presence-absence data for a species.
+
+Now, assume that we sample airborne eDNA in grid-cell $s$ and obtain a positive detection for species A (i.e. $y_s = 1$). We calculate the posterior probability that species A is present (i.e. $z_s = 1$) in grid-cell $s$ using Bayes rule:
+
+$$
+P(z_s=1|y_s = 1) = \frac{p_{11} \psi}{p_{11} \psi + p_{01}(1-\psi)}
+$$
+
+Where:
+
+$z_s \epsilon [0,1]$: true presence (1) or absence (0) of species A in grid-cell $s$ $y_s \epsilon [0,1]$: detection (1) or non-detection (0) of species A in grid-cell $s$
+
+$\psi = P(z_s = 1)$: prior probability that species A is present in grid-cell $s$
+
+$p_{11} = P(y_s = 1|z_s = 1)P(z_s = 1) = (1 - \theta^{FN}_{field}) \cdot (1 - \theta^{FN}_{lab})$: true positive rate derived from the probability of false negatives in the field and lab.
+
+$p_{01} = P(y_s = 1|z_s = 0)P(z_s = 0) = \theta^{FP}_{lab}$: false positive rate derived from the probability of false positives in the lab
+
+However, there is also the possibility that the airborne eDNA sampling results in non-detection (i.e. $y_s = 0$). We need to make sure that our EVS metric accounts for both possibilities. For this, we need to calculate the posterior probability that species A is present (i.e. $z_s = 1$) in grid-cell $s$ given non-detection (i.e. $y_s = 0$):
+
+$$
+P(z_s = 1|y_s = 0) = \frac{(1 - p_{11}) \psi}{(1 - p_{11}) \psi + (1 - p_{01})(1-\psi)}
+$$
+
+If we assume values for the $\theta^{FN}_{field}$, $\theta^{FN}_{lab}$ and $\theta^{FP}_{lab}$, we can do this updating of the R-values under the scenario of detection and non-detection. In practice, these values can be estimated using experiments or can be modeled directly if multiple samples are taken in a given grid-cell.
+
+```{r}
+# set values for these parameters
+
+# false negative rate in the field
+theta_fn_field <- 0.25
+
+# false negative rate in the lab
+theta_fn_lab <- 0.05
+
+# false positive rate in the lab
+theta_fp_lab <- 0.025
+```
+
+Perform the updating calculations for grid-cell $s$ (i.e. loop over each cell) when there is a detection ($y_s = 1$) and when there is a non-detection ($y_s = 0$). In addition, calculate the probability of detection for each grid-cell $s$ as the risk scores for the detections and non-detections need to be weighted by the probability of detection ($p_{det})$:
+
+$$
+p_{det} = P(y_s = 1) = p_{11}\psi + p_{01}(1 - \psi)
+$$
+
+```{r}
+# calculate the composite parameters
+p11 <- (1 - theta_fn_field) * (1 - theta_fn_lab)
+p01 <- (theta_fp_lab)
+
+# calculate the current R-value
+R_p_initial <- sum(grid$R)
+
+# loop over each grid-cell
+grid_list <- list()
+for (i in seq_len(nrow(grid))) {
+
+  # make a copy of the grid data
+  x <- 
+    grid |>
+    dplyr::mutate(psi_update_det = psi,
+                  psi_update_no_det = psi)
+
+  # update the ith grid-cell
+  
+  # detection
+  x$psi_update_det[i] <- (p11 * x$psi[i]) / ((p11 * x$psi[i]) + (p01 * (1 - x$psi[i])))
+  
+  # non-detection
+  x$psi_update_no_det[i] <- ((1 - p11) * x$psi[i]) / (((1 - p11) * x$psi[i]) + ((1 - p01) * (1 - x$psi[i])))
+  
+  # calculate R-after-sampling
+  
+  # detection
+  x$R_update_det <- with(x,
+                         psi_update_det * w_species * w_site * k_ip)
+  
+  # no detection
+  x$R_update_no_det <- with(x,
+                            psi_update_no_det * w_species * w_site * k_ip)
+  
+  # calculate the probability of detection
+  p_det <- (p11 * x$psi[i]) + (p01 * (1 - x$psi[i]))
+  
+  # summarise the data and add to list
+  grid_list[[i]] <-
+    dplyr::tibble(site = x$site[i],
+                  R_p_initial = R_p_initial,
+                  p_det = p_det,
+                  R_p_update_det = sum(x$R_update_det),
+                  R_p_update_no_det = sum(x$R_update_no_det))
+  
+}
+
+# bind into a data.frame
+evs_grid <- dplyr::bind_rows(grid_list)
+
+# check the data
+head(evs_grid)
+```
+
+Using these R values and the probability of detection, we can modify our original EVS formula:
+
+$$
+\text{EVS}(s) = |\sum R_{i,p}(\text{after sampling }s) - \sum R_{i,p}(\text{current})|
+$$
+
+We do this by simply taking a weighted average of the EVS under the scenario of detection and non-detection based on the probability of detection ($p_{det}$).
+
+To do this, we define the change in risk score for the protected area $p$ after detection as $\Delta R_{det, p}$ and the change in risk score for the protected area $p$ after non-detection as $\Delta R_{no-det, p}$
+
+$$
+\Delta R_{det, p} = | \sum R_{i,p}(\text{after detection, }s) - \sum R_{i,p}(\text{current})|
+$$
+
+$$
+\Delta R_{no-det, p} = |\sum R_{i,p}(\text{after non-detection, }s) - \sum R_{i,p}(\text{current})|
+$$
+
+We then calculate the EVS as the weighted average of these delta risk scores by the probability of detection as:
+
+$$
+\text{EVS}(s) = p_{det} \times \Delta R_{det, p} + (1 - p_{det}) \times \Delta R_{no-det, p}
+$$
+
+By doing this, we make sure that we incorporate both possible outcomes (i.e. detection and non-detection) are accounted for in the EVS calculation:
+
+```{r}
+# calculate the delta values
+evs_grid$delta_R_p_det <- with(evs_grid, abs(R_p_update_det - R_p_initial))
+evs_grid$delta_R_p_no_det <- with(evs_grid, abs(R_p_update_no_det - R_p_initial))
+
+# calculate the weighted average EVS
+evs_grid$EVS <-
+  with(evs_grid,
+       (p_det * delta_R_p_det) + ((1 - p_det) * delta_R_p_no_det))
+
+# check the data
+head(evs_grid)
+```
+
+Based on this analysis, "site_3" has the highest EVS and, therefore, based on all the information that we currently have, it would be best to sample at "site_3" as this is where information gain would be highest.
+
+**More protected areas and more species**
+
+This example is based on one species and one protected area. However, the idea behind **AIRIAS** is to do this for more than 40 different invasive alien species across the Natura 2000 network of Belgium. Therefore, for each grid cell, for each species and each protected area, there will be some EVS value. Our proposed sampling scheme will then need to prioritise sites that provide maximum information value across species and protected areas given limited resources.
+
+Therefore, on top of this risk EVS model, we need a prioritisation algorithm that attempts to balance EVS gains for different protected areas and species.
+
+To simulate this, we will simply assign random EVS values to sites for different species and protected areas for testing and developing the algorithm.
+
+```{r}
+# simulate a full EVS dataset across protected areas and species
+
+# number of species
+n_sp <- 10
+
+# number of protected areas
+n_pa <- 5
+
+# number of sites
+n_sites <- 100
+
+# simulate datasets
+opt_grid <-
+  tidyr::expand_grid(species = paste0("sp_", seq_len(n_sp)),
+                     pa = paste0("pa_", seq_len(n_pa)),
+                     site = paste0("site_", seq_len(n_sites))) |>
+  dplyr::group_by(species, pa) |>
+  dplyr::mutate(EVS = runif(n = n_sites, 0.001, 0.1)) |>
+  dplyr::ungroup()
+
+# check the data
+head(opt_grid)
+```
+
+Let's say that we can only sample 10 sites. Our goal is to protect all the different protected areas and maximise the EVS across species. The simplest way to do this is using a *greedy* approach where the EVS values are simply across protected areas and species for each site. We then rank the sites. This approach has no constraints and simply selects sites that give the most information across protected areas and species.
+
+```{r}
+# sum EVS across species and, per site:
+site_scores <- 
+  opt_grid |>
+  dplyr::group_by(site) |>
+  dplyr::summarise(EVS_total = sum(EVS)) |>
+  dplyr::arrange(dplyr::desc(EVS_total))
+
+# pick the top 10 sites:
+selected_sites <- site_scores |> dplyr::slice_head(n = 10)
+
+# check the 10 selected sites
+selected_sites
+```
+
+A second approach would be to add constraints such as covering each protected area (i.e. EVS values computed from the perspective of that protected area).
