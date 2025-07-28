@@ -4,13 +4,15 @@ format: html
 editor: source
 ---
 
-This is a minimal working example for how the **AIRIAS** (*Adaptive Invasion-Risk Intelligence for Protected Areas with eDNA Surveillance*) project is envisioned to work.
+### Basic approach
 
-Consider a single protected area (e.g. "pa_1") and a single invasive species ("sp_1"). Moreover, let's consider a simple one-dimensional landscape with four grid-cells or "sites" where "site_1" is the protected area (i.e. "pa_1"):
+This is a minimal working example for how the **AIRIES** (*Adaptive Invasion-Risk Intelligence for Protected Areas with eDNA Surveillance*) project is envisioned to work.
+
+Consider a single protected area (e.g. "pa_1") and a single invasive species ("sp_1"). Moreover, let's consider a simple one-dimensional landscape with 10 grid-cells or "sites" where "site_1", "site_2" and "site_3" form the protected area (i.e. "pa_1"):
 
 ```{r}
 # create a 1-dimension landscape
-grid <- dplyr::tibble(site = paste0("site_", 1:4))
+grid <- dplyr::tibble(site = paste0("site_", 1:10))
 
 # spatial location on a line
 grid$spatial_location <- runif(n = nrow(grid), 0, 10)
@@ -19,19 +21,20 @@ grid$spatial_location <- runif(n = nrow(grid), 0, 10)
 grid$pa <- "pa_1"
 
 # add a variable with pa_in
-grid$pa_in <- c(1, 0, 0, 0)
+grid$pa_in <- c(rep(1, 3), rep(0, 7))
 
 # check these data
 head(grid)
 ```
 
-This data.frame shows four sites ("site_1" to "site_4") at a numeric spatial location for "pa_1" and shows that "site_1" is within "pa_1" (i.e. pa_in == 1). The data is set-up in this way so that it is easy to estimate the influence of all grid-cells on a given protected area.
+This data.frame shows 10 sites ("site_1" to "site_10") at a numeric spatial location for "pa_1" and shows that "site_1", "site_2" and "site_3" are within "pa_1" (i.e. pa_in == 1). The data is set-up in this way so that it is easy to estimate the influence of all grid-cells on a given protected area.
 
-Next, we define a simple dispersal kernel based on how far each grid-cell is from the focal protected area (i.e. "pa_1"). For this, we first calculate the distance between each site and the focal protected area:
+Next, we define a simple dispersal kernel based on how far each grid-cell is from the focal protected area (i.e. "pa_1"). For this, we first calculate the distance between each site and the centroid of the focal protected area (in one-dimension, the centroid is simply the mean). Grid-cells that comprise the protected area (i.e. "site_1", "site_2" and "site_3") are given distances from the focal protected area of 0. 
 
 ```{r}
 # calculate distance
-grid$dist_pa <- abs(grid$spatial_location - grid$spatial_location[grid$pa_in == 1])
+grid$dist_pa <- abs(grid$spatial_location - mean(grid$spatial_location[grid$pa_in == 1]))
+grid$dist_pa <- with(grid, ifelse(pa_in == 1, 0, spatial_location))
 
 # check the data
 head(grid)
@@ -55,22 +58,39 @@ grid$k_ip <- with(grid,
 head(grid)
 ```
 
-The next piece of information is the probability that grid-cell $i$ is occupied by the focal species. We would typically derive this using a logistic-regression model of known presence-absence data (i.e. a kind of species distribution model). In this case, we set them manually as $\phi_i$:
+The next piece of information is the prior distribution that grid-cell $i$ is occupied by the focal species. We would typically derive this using a logistic-regression model of known presence-absence data (i.e. a kind of species distribution model) fit in a Bayesian framework where $y_i$ is the presence (1) or absence (0) of the species in grid-cell i. Therefore, we would approximate the posterior probability distribution $p(\psi_i | y_i)$ using posterior samples ($\psi_i^{(s)} \text{ where }s = 1,...,S$). Note that while this is technically a posterior distribution, we will use it as the **prior distribution** of species occupancy for each grid-cell.
+
+We draw the samples ($\psi_i^{(s)} \text{ where }s = 1,...,S$) from a beta-distribution:
 
 ```{r}
-# define grid cell probability of occupancy
-grid$psi <- c(0.05, 0.2, 0.3, 0.4)
+# set these probabilities manually and use a beta-distribution
+shape1 <- seq(0.1, 2, length.out = nrow(grid))
+
+# generate the psi-values
+psi_list <-
+  lapply(shape1, function(x) {
+  rbeta(n = 100, shape1 = x, shape2 = 5) |> round(5)
+})
+
+# name the list by site
+names(psi_list) <- grid$site
 ```
 
-Using this information, we can define each cell's contribution to the risk to the focal protected area (i.e. "pa_1" in this case) as:
+For each grid-cell and each sample of species occupancy ($\psi_i^{(s)} \text{ where }s = 1,...,S$), we define each grid-cell's contribution to the risk to the focal protected area ("pa_1" in this case) as:
 
 $$
-R_{i,p} = \psi_i \cdot w_{species} \cdot w_{site} \cdot K_{i,p}
+R_{i,p}^{(s)} = \psi_i^{(s)} \cdot w_{species} \cdot w_{site} \cdot K_{i,p}
 $$
 
+$$
+\text{where: } \psi_i^{(s)} \text{ where }s = 1,...,S
+$$
 Where:
 
-$\psi_i$ is the probability that a focal species is present in cell $i$ $w_{species}$ is a weight describing the potential ecological damage of the species $w_{site}$ is a weight describing the ecological value of the protected area $K_{i,p}$ is the dispersal kernel
+$\psi_i^{(s)}$ is the probability that a focal species is present in cell $i$ given sample $s$ \\ 
+$w_{species}$ is a weight describing the potential ecological damage of the species \\ 
+$w_{site}$ is a weight describing the ecological value of the protected area \\ 
+$K_{i,p}$ is the dispersal kernel
 
 ```{r}
 # set the species weight
@@ -80,23 +100,97 @@ w_species <- 0.5
 w_site <- 0.8
 
 # calculate the risk values for each cell
-grid$R <- with(grid,
-               psi * w_species * w_site * k_ip)
+R_list <- list()
+for (i in seq_len(nrow(grid))) {
+  R_list[[i]] <- psi_list[[i]] * w_species * w_site * grid$k_ip[i]
+}
+names(R_list) <- grid$site
 
 # check the output
-head(grid)
+R_list[[1]]
 ```
 
-From this, we can calculate the overall risk score for the focal protected area (i.e. "pa_1") as:
+This leaves us with estimates for two probability distributions for each grid-cell $i$ based on the samples from the posterior distribution:
 
 $$
-R^{tot}_{p} = \sum R_{i,p}
+p(\psi_i) \sim \psi_i^{(s)} \text{ where }s = 1,...,S
+$$
+
+$$
+p(R_{i,p}) \sim  R_{i,p}^{(s)} 
+$$
+
+Because these are valid probability distributions that represent uncertainty, we can subject them to information-theoretical concepts. For example, we can calculate the entropy associated with the risk ($R_{i,p}$) or occupancy ($\psi_i$) of a given grid-cell $i$ in protected area $p$. For example:
+
+$$
+H(R_{i,p}) = -\int p(R_{i,p}) \cdot log(p(R_{i,p})) \cdot d(x)
+$$
+
+To do this, we can use kernel density estimation ($KDE$) to approximate the probability densities of the samples of the risk scores: ($R_{i,p}^{(s)}$):
+
+$$
+\hat{f}(R_{i,p}) = KDE(R_{i,p}^{(s)})
 $$
 
 ```{r}
-# calculate the overall risk score for pa_1
-sum(grid$R)
+# load the ks package
+library(ks)
+
+# approximate the probability using kernel density estimation
+kde_list <- list()
+for (i in seq_along(R_list)) {
+  
+  # fit the kernel density model
+  kde_fit <- ks::kde(R_list[[i]])
+  
+  # evaluate density at each sample
+  kde_list[[i]] <- predict(kde_fit, x = R_list[[i]])
+  
+}
+
+# rename the list
+names(kde_list) <- names(R_list)
+
 ```
+
+We can then use the Monte Carlo approximation of the integral to calculate entropy:
+
+$$
+H(R_{i,p}) = -\frac{1}{S}\sum_{s = 1}^{S}log(\hat{f}(R_{i,p}))
+$$
+
+For example, if we want to calculate entropy for "site_5", we could do the following:
+
+```{r}
+# calculate entropy for "site 5"
+-mean(log(kde_list[[5]]))
+```
+
+This will become important later when we design our sampling framework to maximise information gain. In addition to entropy, we can calculate the expected value of the risk score in a given grid-cell:
+
+$$
+\mathbb{E}_{R_{i,p}}[R_{i,p}] = \frac{1}{n} \times \sum(R_{i,p} = r_{i,p})
+$$
+
+From these expected values for each grid-cell, we can calculate the overall risk score for the focal protected area (i.e. "pa_1") as:
+
+$$
+R^{tot}_{p} = \sum \mathbb{E}_{R_{i,p}}[R_{i,p}]
+$$
+
+For example, we could do the following to calculate the overall risk score of the grid
+
+```{r}
+# calculate the overall risk score for pa_1
+sum(sapply(R_list, mean))
+```
+
+This framework and the methods discussed so far provide a baseline for how we will quantify the probability of occurrence of each species for a given protected area and also the way that we will apply information theory concepts.
+
+### Information-theory approach
+
+The next step in the **AIRIES** workflow is to choose sites to sample for eDNA that will maximise information about the risk of invasive species to protected areas.
+
 
 The **Expected Value of Sampling** quantifies the change in risk associated with sampling (detection or non-detection) a given cell ($s$). It can be written as follows:
 
@@ -116,7 +210,9 @@ The following calculations are based on an **observation model** of how airborne
 
 $$
 y_{ij} \sim Bernoulli(p_{ij})
-$$ $$
+$$ 
+
+$$
 p_{ij} = z_i \times (1 - \theta^{FN}_{field}) \times (1 - \theta^{FN}_{lab}) + (1 - z_i) \times \theta^{FP}_{lab}
 $$ Where:
 
