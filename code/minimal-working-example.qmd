@@ -11,17 +11,29 @@ This is a minimal working example for how the **AIRIES** (*Adaptive Invasion-Ris
 Consider a single protected area (e.g. "pa_1") and a single invasive species ("sp_1"). Moreover, let's consider a simple one-dimensional landscape with 10 grid-cells or "sites" where "site_1", "site_2" and "site_3" form the protected area (i.e. "pa_1"):
 
 ```{r}
-# create a 1-dimension landscape
-grid <- dplyr::tibble(site = paste0("site_", 1:10))
+# number of locations
+n_loc <- 100
 
-# spatial location on a line
-grid$spatial_location <- runif(n = nrow(grid), 0, 10)
+# number of pa_cells
+n_pa <- 5
+
+# create a 1-dimension landscape
+grid <- dplyr::tibble(spatial_location = runif(n = n_loc, 0, 10))
+
+# arrange by spatial location
+grid <- dplyr::arrange(grid, spatial_location)
+
+# add a site name
+grid$site <- paste0("site_", 1:n_loc)
 
 # add protected area identity
 grid$pa <- "pa_1"
 
 # add a variable with pa_in
-grid$pa_in <- c(rep(1, 3), rep(0, 7))
+grid$pa_in <- c(rep(1, n_pa), rep(0, n_loc - n_pa))
+
+# arrange columns
+grid <- dplyr::select(grid, site, spatial_location, pa, pa_in)
 
 # check these data
 head(grid)
@@ -58,18 +70,66 @@ grid$k_ip <- with(grid,
 head(grid)
 ```
 
+We are evalusating risk to the PA from cells outside the PA. Therefore, we remove the PAs and, therefore, conduct the rest of the analysis for grid-cells not present in the PA:
+
+```{r}
+# keep a copy of the PA data for plotting
+grid_pa <- dplyr::filter(grid, pa_in == 1)
+
+# extract sites not present in the pa from the grid
+grid <- dplyr::filter(grid, pa_in == 0)
+```
+
+
 The next piece of information is the prior distribution that grid-cell $i$ is occupied by the focal species. We would typically derive this using a logistic-regression model of known presence-absence data (i.e. a kind of species distribution model) fit in a Bayesian framework where $y_i$ is the presence (1) or absence (0) of the species in grid-cell i. Therefore, we would approximate the posterior probability distribution $p(\psi_i | y_i)$ using posterior samples ($\psi_i^{(s)} \text{ where }s = 1,...,S$). Note that while this is technically a posterior distribution, we will use it as the **prior distribution** of species occupancy for each grid-cell.
 
-We draw the samples ($\psi_i^{(s)} \text{ where }s = 1,...,S$) from a beta-distribution:
+We draw the samples ($\psi_i^{(s)} \text{ where }s = 1,...,S$) from a Beta distribution. The mean of a beta distribution is given by a mean ($\mu$) and a precision parameter ($\kappa$):
+
+$$
+\mu = \frac{\alpha}{\alpha + \beta}
+$$
+
+$$
+\kappa = \alpha + \beta
+$$
+
+The function in R `rbeta` is parameterised unsing the $\alpha$ and $\beta$ parameters. Therefore, to parameterise them in terms of the ($\mu$) and ($\kappa$), we use the following formulae:
+
+$$
+\alpha = \mu + \kappa
+$$
+
+$$
+\beta = \kappa \times(1 - \mu)
+$$
+
+Therefore, we can define a formula to convert the $\mu$ and $\kappa$ values to $\alpha$ and $\beta$ values which makes it easier to parameterise the Beta() distribution.
+
+```{r}
+# define the function
+rbeta_parameters <- function(parameter, mu, kappa) {
+  if (parameter == "alpha") {
+    mu * kappa
+  } else if (parameter == "beta") {
+    kappa * (1 - mu)
+  } else {
+    stop("choose an appropriate parameter argument value")
+  }
+}
+```
 
 ```{r}
 # set these probabilities manually and use a beta-distribution
-shape1 <- seq(0.1, 2, length.out = nrow(grid))
+mu <- seq(0.05, 0.25, length.out = nrow(grid))
+kappa <- 25
 
 # generate the psi-values
 psi_list <-
-  lapply(shape1, function(x) {
-  rbeta(n = 100, shape1 = x, shape2 = 5) |> round(5)
+  lapply(mu, function(x) {
+  rbeta(n = 100, 
+        shape1 = rbeta_parameters("alpha", mu = x, kappa = kappa), 
+        shape2 = rbeta_parameters("beta", mu = x, kappa = kappa)) |> 
+      round(5)
 })
 
 # name the list by site
@@ -85,6 +145,7 @@ $$
 $$
 \text{where: } \psi_i^{(s)} \text{ where }s = 1,...,S
 $$
+
 Where:
 
 $\psi_i^{(s)}$ is the probability that a focal species is present in cell $i$ given sample $s$ \\ 
@@ -189,32 +250,69 @@ This framework and the methods discussed so far provide a baseline for how we wi
 
 ### Information-theory approach
 
-The next step in the **AIRIES** workflow is to choose sites to sample for eDNA that will maximise information about the risk of invasive species to protected areas.
+The next step in the **AIRIES** workflow is to choose sites to sample for eDNA that will maximise information about the risk of invasive species to protected areas. To do this, we will simulate the change in the risk score distribution for a given grid cell $i$ to protected area $p$ after eDNA sampling (i.e. detection or non-detection): Going from: $p(R_{i,p})_{\text{before}}$ to $p(R_{i,p})_{\text{after}}$.
 
+Based on this change in distribution, we will assess two aspects:
 
-The **Expected Value of Sampling** quantifies the change in risk associated with sampling (detection or non-detection) a given cell ($s$). It can be written as follows:
+#### Information gain
 
-$$
-\text{EVS}(s) = |\sum R_{i,p}(\text{after sampling }s) - \sum R_{i,p}(\text{current})|
-$$
+How much information would we gain by conducting eDNA sampling in grid-cell $i$ in terms of the risk to protected area $p$? For this, we would compare $p(R_{i,p,\text{before}})$ to $p(R_{i,p,\text{after}})$ using the Kullback-Leibler (KL) divergence.
 
-If the total risk ($\sum R_{i,p}(\text{after sampling }s)$) after sampling $s$ is substantially different from the total risk before sampling $s$ ($\sum R_{i,p}(\text{current})$), then we have gained considerable *information* by sampling $s$. In such a case, the $\text{EVS}(s)$ would be high.
-
-If we do this for each grid-cell, we can produce a map of where sampling would lead to the greatest information gain. More information about risks will lead to better management outcomes.
-
-Note that for this calculation, the *after sampling* value is only based on changing the $psi_i$, the probability that a focal species is present in cell $i$. This updated, posterior probability is based on the following observation model:
-
-**Observation model:**
-
-The following calculations are based on an **observation model** of how airborne eDNA detections ($y_{ij}$) in sample $j$ and in grid-cell $i$ translate to the probability of detection ($p_{ij}$):
+This is a measure of how information this data has added to our knowledge about the risk of the species to protected area $p$ in grid-cell $i$.
 
 $$
-y_{ij} \sim Bernoulli(p_{ij})
+\hat{f}(R_{i,p,\text{before}}^{(s)}) = KDE(R_{i,p,\text{before}}^{(s)})
+$$
+
+$$
+\hat{f}(R_{i,p,\text{after}}^{(s)}) = KDE(R_{i,p,\text{after}}^{(s)})
+$$
+
+We can then use these kernel density estimates to compute KL divergence using Monte-Carlo methods:
+
+$$
+D_{KL} = \mathbb{E}\biggl[log\frac{\hat{f}(R_{i,p,\text{after}}^{(s)})}{\hat{f}(R_{i,p,\text{before}}^{(s)})}\biggr]
+$$
+
+#### Change in risk
+
+This is still under development...
+
+Information about risk is important. However, we also want to asymmetrically value risk. Imagine we have grid-cell $i$ which, based on current information, has low risk to protected area $p$. Let's say a detection of the species would cause a small relative decrease in risk but a large relative 
+
+We simulate taking an eDNA sample
+
+If taking an eDNA sample (i.e. detection or non-detection) will increase the risk from grid-cell $i$ to protected area $p$, then this is more valuable to know than if the risk will decrease. An increase in risk could demand action, a decrease in risk is good to know but does not necessarily cause action.
+
+#### Decision theory
+
+Calculating KL-divergence and $\Delta \text{risk}$ in each grid-cell, we can produce a map of where sampling would lead to the greatest information gain and change in average risk. Based on this map, we can use optimisation algorithms to then prioritise sites.
+
+### Observation model
+
+The idea behind **AIRIES** is to update our prior risk distribution ($p(R_{i,p})_{\text{before}}$) based on taking an eDNA sample and testing for a species: $p(R_{i,p})_{\text{after}}$. Therefore, we need a way to update our risk score. Our risk score equation is:
+
+$$
+R_{i,p}^{(s)} = \psi_i^{(s)} \cdot w_{species} \cdot w_{site} \cdot K_{i,p}
+$$
+
+Therefore, to update the distribution, we simply need to update the $psi_i$ values as the rest are constants:
+
+$$
+R_{i,p,updated}^{(s)} = \psi_{i, updated}^{(s)} \cdot w_{species} \cdot w_{site} \cdot K_{i,p}
+$$
+
+To do this, we need an **observation model** of how eDNA detections ($y_{ij}$) in sample $j$ and in grid-cell $i$ translate to the probability of detection ($p_{i}$). We use the following observation model:
+
+$$
+y_{ij} \sim Bernoulli(p_{i})
 $$ 
 
 $$
-p_{ij} = z_i \times (1 - \theta^{FN}_{field}) \times (1 - \theta^{FN}_{lab}) + (1 - z_i) \times \theta^{FP}_{lab}
-$$ Where:
+p_{i} = z_i \times (1 - \theta^{FN}_{field}) \times (1 - \theta^{FN}_{lab}) + (1 - z_i) \times \theta^{FP}_{lab}
+$$ 
+
+Where:
 
 $z_i$: true presence (1) or true absence (0)
 
@@ -226,148 +324,325 @@ $\theta^{FP}_{lab}$ false positive rate in the lab (i.e. detection when species 
 
 **Bayesian updating**
 
-With this as our underlying observational process model, we can use Bayesian updating to determine how the occupancy probability and, therefore, the risk score would change if we collected an airborne eDNA sample for a given grid-cell. Specifically, consider grid-cell $s$ and the let the prior probability that species A is present be $psi_s$. This prior probability is derived from a species distribution model based on known presence-absence data for a species.
+With this as our underlying observational process model, we can use Bayesian updating to determine how the occupancy probability and, therefore, the risk score would change if we collected an airborne eDNA sample for a given grid-cell. Specifically, consider grid-cell $i$ and the let the prior probability that species A is present be $psi_{i,prior}$.
 
-Now, assume that we sample airborne eDNA in grid-cell $s$ and obtain a positive detection for species A (i.e. $y_s = 1$). We calculate the posterior probability that species A is present (i.e. $z_s = 1$) in grid-cell $s$ using Bayes rule:
+Now, assume that we sample eDNA in grid-cell $i$ and obtain a positive detection for species A (i.e. $y_i = 1$). We calculate the posterior probability that species A is present (i.e. $z_i = 1$) in grid-cell $i$ using Bayes rule:
 
 $$
-P(z_s=1|y_s = 1) = \frac{p_{11} \psi}{p_{11} \psi + p_{01}(1-\psi)}
+P(z_i=1|y_i = 1) = \frac{p_{11} \psi_{i,prior}}{p_{11} \psi_{i,prior} + p_{01}(1-\psi_{i,prior})}
 $$
 
 Where:
 
-$z_s \epsilon [0,1]$: true presence (1) or absence (0) of species A in grid-cell $s$ $y_s \epsilon [0,1]$: detection (1) or non-detection (0) of species A in grid-cell $s$
+$z_i \epsilon [0,1]$: true presence (1) or absence (0) of species A in grid-cell $i$ $y_i \epsilon [0,1]$: detection (1) or non-detection (0) of species A in grid-cell $i$
 
-$\psi = P(z_s = 1)$: prior probability that species A is present in grid-cell $s$
+$\psi_{i,prior} = P(z_i = 1)$: prior probability that species A is present in grid-cell $i$
 
-$p_{11} = P(y_s = 1|z_s = 1)P(z_s = 1) = (1 - \theta^{FN}_{field}) \cdot (1 - \theta^{FN}_{lab})$: true positive rate derived from the probability of false negatives in the field and lab.
+$p_{11} = P(y_i = 1|z_i = 1)P(z_i = 1) = (1 - \theta^{FN}_{field}) \cdot (1 - \theta^{FN}_{lab})$: true positive rate derived from the probability of false negatives in the field and lab.
 
-$p_{01} = P(y_s = 1|z_s = 0)P(z_s = 0) = \theta^{FP}_{lab}$: false positive rate derived from the probability of false positives in the lab
+$p_{01} = P(y_i = 1|z_i = 0)P(z_i = 0) = \theta^{FP}_{lab}$: false positive rate derived from the probability of false positives in the lab
 
-However, there is also the possibility that the airborne eDNA sampling results in non-detection (i.e. $y_s = 0$). We need to make sure that our EVS metric accounts for both possibilities. For this, we need to calculate the posterior probability that species A is present (i.e. $z_s = 1$) in grid-cell $s$ given non-detection (i.e. $y_s = 0$):
+However, there is also the possibility that the eDNA sampling results in non-detection (i.e. $y_i = 0$). We need to account for both possibilities. For this, we need to calculate the posterior probability that species A is present (i.e. $z_i = 1$) in grid-cell $s$ given non-detection (i.e. $y_i = 0$):
 
 $$
-P(z_s = 1|y_s = 0) = \frac{(1 - p_{11}) \psi}{(1 - p_{11}) \psi + (1 - p_{01})(1-\psi)}
+P(z_s = 1|y_s = 0) = \frac{(1 - p_{11}) \psi_{i,prior}}{(1 - p_{11}) \psi_{i,prior} + (1 - p_{01})(1-\psi_{i,prior})}
 $$
 
-If we assume values for the $\theta^{FN}_{field}$, $\theta^{FN}_{lab}$ and $\theta^{FP}_{lab}$, we can do this updating of the R-values under the scenario of detection and non-detection. In practice, these values can be estimated using experiments or can be modeled directly if multiple samples are taken in a given grid-cell.
+Now, as an example, we will perform the updating calculations for grid-cell $i$ (i.e. loop over each cell) when there is a detection ($y_i = 1$) and when there is a non-detection ($y_i = 0$). To do this, we assume that we have samples from our observation model for:
+
+$p_{11} = P(y_i = 1|z_i = 1)P(z_i = 1) = (1 - \theta^{FN}_{field}) \cdot (1 - \theta^{FN}_{lab})$: true positive rate derived from the probability of false negatives in the field and lab.
+
+$p_{01} = P(y_i = 1|z_i = 0)P(z_i = 0) = \theta^{FP}_{lab}$: false positive rate derived from the probability of false positives in the lab
+
+Practically, these samples (i.e. $p_{11}^{s}$ and $p_{01}^{s}$) would come from fitting the **observation model** to data for a given species based on experiments with and without known species. For now, we will simply assume we have samples for the $\theta^{FN}_{field}$, $\theta^{FN}_{lab}$ and $\theta^{FP}_{lab}$ parameters and then use these samples to derive the samples for $p_{11}^{s}$ and $p_{01}^{s}$.
+
+For this, we use the Beta() distribution:
 
 ```{r}
-# set values for these parameters
+# draw samples for $\theta^{FN}_{field}$, $\theta^{FN}_{lab}$ and $\theta^{FP}_{lab}$
+kappa <- 25
 
 # false negative rate in the field
-theta_fn_field <- 0.25
+theta_fn_field <- 
+  rbeta(n = 100, 
+        shape1 = rbeta_parameters("alpha", mu = 0.25, kappa = kappa), 
+        shape2 = rbeta_parameters("beta", mu = 0.25, kappa = kappa)) |> 
+  round(5)
 
 # false negative rate in the lab
-theta_fn_lab <- 0.05
+theta_fn_lab <-
+  rbeta(n = 100, 
+        shape1 = rbeta_parameters("alpha", mu = 0.05, kappa = kappa), 
+        shape2 = rbeta_parameters("beta", mu = 0.05, kappa = kappa)) |> 
+  round(5)
 
 # false positive rate in the lab
-theta_fp_lab <- 0.025
+theta_fp_lab <-
+  rbeta(n = 100, 
+        shape1 = rbeta_parameters("alpha", mu = 0.025, kappa = kappa), 
+        shape2 = rbeta_parameters("beta", mu = 0.025, kappa = kappa)) |> 
+  round(5)
 ```
 
-Perform the updating calculations for grid-cell $s$ (i.e. loop over each cell) when there is a detection ($y_s = 1$) and when there is a non-detection ($y_s = 0$). In addition, calculate the probability of detection for each grid-cell $s$ as the risk scores for the detections and non-detections need to be weighted by the probability of detection ($p_{det})$:
+Based on these distributions (which come from the same model and, therefore, can be combined sample by sample), we get samples for: $p_{11}^{s}$ and $p_{01}^{s}$
+
+```{r}
+# calculate the composite parameters
+p11_s <- (1 - theta_fn_field) * (1 - theta_fn_lab)
+p01_s <- (theta_fp_lab)
+```
+
+To perform the Bayesian updating, we use kernel density estimation to estimate the probability distributions from these samples (i.e. for $psi_{i,prior}^{(s)}$, $p_{11}^{s}$ and $p_{01}^{s}$. We then draw samples from these kernel density estimates and use these samples to estimate the posterior distribution of species occupancy given detection: $P(z_i=1|y_i = 1)$ and given non-detection $P(z_i=1|y_i = 0)$.
+
+We also estimate the probability of detection as this will be required when estimating information gain in a later step:
 
 $$
 p_{det} = P(y_s = 1) = p_{11}\psi + p_{01}(1 - \psi)
 $$
 
 ```{r}
-# calculate the composite parameters
-p11 <- (1 - theta_fn_field) * (1 - theta_fn_lab)
-p01 <- (theta_fp_lab)
+# for each grid-cell
 
-# calculate the current R-value
-R_p_initial <- sum(grid$R)
+# prior probability
+psi_prior_list <- list()
 
-# loop over each grid-cell
-grid_list <- list()
+# probability after detection
+psi_post_det_list <- list()
+
+# probability after non-detection
+psi_post_no_det_list <- list()
+
+# probability of detection
+p_det_list <- list()
+
+# number of samples
+n <- 100
+
 for (i in seq_len(nrow(grid))) {
-
-  # make a copy of the grid data
-  x <- 
-    grid |>
-    dplyr::mutate(psi_update_det = psi,
-                  psi_update_no_det = psi)
-
-  # update the ith grid-cell
   
-  # detection
-  x$psi_update_det[i] <- (p11 * x$psi[i]) / ((p11 * x$psi[i]) + (p01 * (1 - x$psi[i])))
+  # estimate the kernel density functions for $psi_{i,prior}^{(s)}$, $p_{11}^{s}$ and $p_{01}^{s}$
+  kde_psi_prior <- ks::kde(psi_list[[i]])
+  kde_p11 <- ks::kde(p11_s)
+  kde_p01 <- ks::kde(p01_s)
   
-  # non-detection
-  x$psi_update_no_det[i] <- ((1 - p11) * x$psi[i]) / (((1 - p11) * x$psi[i]) + ((1 - p01) * (1 - x$psi[i])))
+  # sample from these kdes
+  psi_prior_samples <- ks::rkde(n = n, fhat = kde_psi_prior)
+  p11_samples <- ks::rkde(n = n, fhat = kde_p11)
+  p01_samples <- ks::rkde(n = n, fhat = kde_p01)
   
-  # calculate R-after-sampling
+  # bound values between 0-1
+  psi_prior_samples <- pmin(pmax(psi_prior_samples, 10e-9), 0.99999999999)
+  p11_samples <- pmin(pmax(p11_samples, 10e-9), 0.99999999999)
+  p01_samples <- pmin(pmax(p01_samples, 10e-9), 0.99999999999)
   
-  # detection
-  x$R_update_det <- with(x,
-                         psi_update_det * w_species * w_site * k_ip)
+  # compute the posterior probabilities under detection
+  num <- (p11_samples * psi_prior_samples)
+  den <- (p11_samples * psi_prior_samples) + (p01_samples * (1 - psi_prior_samples))
+  psi_post_det_list[[i]] <- num / den
   
-  # no detection
-  x$R_update_no_det <- with(x,
-                            psi_update_no_det * w_species * w_site * k_ip)
+  # compute posterior probabilities under non-detection
+  num <- ((1 - p11_samples) * psi_prior_samples)
+  den <- ((1 - p11_samples) * psi_prior_samples) + ((1 - p01_samples) * (1 - psi_prior_samples))
+  psi_post_no_det_list[[i]] <- num / den
   
-  # calculate the probability of detection
-  p_det <- (p11 * x$psi[i]) + (p01 * (1 - x$psi[i]))
-  
-  # summarise the data and add to list
-  grid_list[[i]] <-
-    dplyr::tibble(site = x$site[i],
-                  R_p_initial = R_p_initial,
-                  p_det = p_det,
-                  R_p_update_det = sum(x$R_update_det),
-                  R_p_update_no_det = sum(x$R_update_no_det))
-  
+  # compute probability of detection
+  p_det_list[[i]] <- (p11_samples * psi_prior_samples) + (p01_samples * (1 - psi_prior_samples))
+ 
+  # save the prior-samples
+  psi_prior_list[[i]] <- psi_prior_samples
+   
 }
 
-# bind into a data.frame
-evs_grid <- dplyr::bind_rows(grid_list)
-
 # check the data
-head(evs_grid)
+psi_post_det_list[[1]] |> round(5)
+
 ```
 
-Using these R values and the probability of detection, we can modify our original EVS formula:
+Using these simulated probabilities of occurrence for a given grid-cell $i$ under detection ($P(z_i=1|y_i = 1)$) and no detection ($P(z_i=1|y_i = 0)$) scenarios, we can calculated updated risk scores.
+
+Assuming detection, we get the following:
 
 $$
-\text{EVS}(s) = |\sum R_{i,p}(\text{after sampling }s) - \sum R_{i,p}(\text{current})|
-$$
-
-We do this by simply taking a weighted average of the EVS under the scenario of detection and non-detection based on the probability of detection ($p_{det}$).
-
-To do this, we define the change in risk score for the protected area $p$ after detection as $\Delta R_{det, p}$ and the change in risk score for the protected area $p$ after non-detection as $\Delta R_{no-det, p}$
-
-$$
-\Delta R_{det, p} = | \sum R_{i,p}(\text{after detection, }s) - \sum R_{i,p}(\text{current})|
+P(z_i=1|y_i = 1) \sim \psi_{i, updated: \text{ detection}}^{(s)}
 $$
 
 $$
-\Delta R_{no-det, p} = |\sum R_{i,p}(\text{after non-detection, }s) - \sum R_{i,p}(\text{current})|
+R_{i,p,updated: \text{ detection}}^{(s)} = \psi_{i, updated: \text{ detection}}^{(s)} \cdot w_{species} \cdot w_{site} \cdot K_{i,p}
 $$
 
-We then calculate the EVS as the weighted average of these delta risk scores by the probability of detection as:
+Assuming non-detection, we get the following:
 
 $$
-\text{EVS}(s) = p_{det} \times \Delta R_{det, p} + (1 - p_{det}) \times \Delta R_{no-det, p}
+P(z_i=1|y_i = 0) \sim \psi_{i, updated: \text{ non-detection}}^{(s)}
 $$
 
-By doing this, we make sure that we incorporate both possible outcomes (i.e. detection and non-detection) are accounted for in the EVS calculation:
+$$
+R_{i,p,updated: \text{ non-detection}}^{(s)} = \psi_{i, updated: \text{ non-detection}}^{(s)} \cdot w_{species} \cdot w_{site} \cdot K_{i,p}
+$$
+
+Here, we calculate the updated risk scores under scenarios of detection and no-detection:
 
 ```{r}
-# calculate the delta values
-evs_grid$delta_R_p_det <- with(evs_grid, abs(R_p_update_det - R_p_initial))
-evs_grid$delta_R_p_no_det <- with(evs_grid, abs(R_p_update_no_det - R_p_initial))
+# detection: calculate the updated risk values for each cell
+R_det_list <- list()
+for (i in seq_len(nrow(grid))) {
+  R_det_list[[i]] <- psi_post_det_list[[i]] * w_species * w_site * grid$k_ip[i]
+}
+names(R_det_list) <- grid$site
 
-# calculate the weighted average EVS
-evs_grid$EVS <-
-  with(evs_grid,
-       (p_det * delta_R_p_det) + ((1 - p_det) * delta_R_p_no_det))
-
-# check the data
-head(evs_grid)
+# non-detection: calculate the updated risk values for each cell
+R_no_det_list <- list()
+for (i in seq_len(nrow(grid))) {
+  R_no_det_list[[i]] <- psi_post_no_det_list[[i]] * w_species * w_site * grid$k_ip[i]
+}
+names(R_no_det_list) <- grid$site
 ```
 
-Based on this analysis, "site_3" has the highest EVS and, therefore, based on all the information that we currently have, it would be best to sample at "site_3" as this is where information gain would be highest.
+
+### Estimate information gain
+
+With samples from the posterior distribution of the risk to protected area $p$ from grid-cell $i$ under scenarios of detection ($R_{i,p,updated: \text{ detection}}^{(s)} $) and non-detection ($R_{i,p,updated: \text{ non-detection}}^{(s)}$), we can compute the KL-divergence under both these scenarios not that $\hat{f}$ denotes the kernel density estimated distribution:
+
+$$
+D_{KL, \text{ detection}} = \mathbb{E}\biggl[log\frac{\hat{f}(R_{i,p,updated: \text{ detection}}^{(s)})}{\hat{f}(R_{i,p,before}^{(s)})}\biggr]
+$$
+
+$$
+D_{KL, \text{ non-detection}} = \mathbb{E}\biggl[log\frac{\hat{f}(R_{i,p,updated: \text{ non-detection}}^{(s)})}{\hat{f}(R_{i,p,before}^{(s)})}\biggr]
+$$
+
+The **expected information gain** in grid-cell $i$ to protected area $p$ ($EIG_i,p$) from sampling is then a weighted average of these two KL-divergences which is weighted by the probability of detection ($p_{det}$). Because $p_{det}$ is a distribution of samples (i.e. $p_{det}^{(s)}$), this results in a distribution of $EIG_i,p$ values i.e. ($EIG_{i,p}^{s}$):
+
+$$
+EIG_{i,p}^{s} = p_{det}^{(s)}\cdot D_{KL, \text{ detection}}  + (1 - p_{det}^{(s)}) \cdot D_{KL, \text{ non-detection}}
+$$
+
+```{r}
+# define function for the kl-divergence based on kde samples
+kl_divergence <- function(q_samples, p_samples) {
+  
+  # KDE fit using ks
+  kde_post <- ks::kde(x = q_samples)
+  kde_prior <- ks::kde(x = p_samples)
+  
+  # evaluate both densities at the posterior sample points
+  q_vals <- predict(kde_post, x = q_samples)
+  p_vals <- predict(kde_prior, x = q_samples)
+  
+  # avoid division by zero / log(0)
+  q_vals <- pmax(q_vals, 1e-10)
+  p_vals <- pmax(p_vals, 1e-10)
+  
+  # monte Carlo estimate of KL divergence
+  mean(log(q_vals / p_vals))
+
+}
+
+# calculate eig for each grid cell weighted by probability of detection
+eig_list <- list()
+for (i in seq_along(psi_prior_list)) {
+
+  # kl_divergence detection
+  kl_det <- kl_divergence(q_samples = psi_post_det_list[[i]], 
+                          p_samples = psi_prior_list[[i]])
+  
+  # kl_divergence non-detection
+  kl_no_det <- kl_divergence(q_samples = psi_post_no_det_list[[i]], 
+                             p_samples = psi_prior_list[[i]])
+  
+  # get the eig for each grid cell distribution
+  eig <- (p_det_list[[i]] * kl_det) + ((1 - p_det_list[[i]]) * kl_no_det)
+  
+  # wrap into a data.frame
+  eig_list[[i]] <- dplyr::tibble(site = grid$site[i],
+                                 sample = seq_along(eig),
+                                 prior_psi = psi_prior_list[[i]],
+                                 post_det_psi = psi_post_det_list[[i]],
+                                 post_no_det_psi = psi_post_no_det_list[[i]],
+                                 R_initial = R_list[[i]],
+                                 R_after_detection = R_det_list[[i]],
+                                 R_after_no_detection = R_no_det_list[[i]],
+                                 eig_value = eig)
+  
+}
+```
+
+Plot the **expected information gain** of sampling in the different grid-cells relative to our theoretical protected area:
+
+```{r}
+# load the plotting function
+library(ggplot2)
+library(patchwork)
+
+# bind into a data.frame and join
+plot_dat <-
+  dplyr::left_join(grid, dplyr::bind_rows(eig_list), by = "site")
+
+# plot prior risk
+p1 <-
+  ggplot(data = plot_dat,
+       mapping = aes(x = spatial_location, y = R_initial)) +
+  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
+  ylab("Prior risk") +
+  xlab("One-dimensional location")
+
+# plot risk after sampling: Detection
+p2 <-
+  ggplot(data = plot_dat,
+       mapping = aes(x = spatial_location, y = R_after_detection)) +
+  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
+  ylab("Posterior risk (detection)") +
+  xlab("One-dimensional location")
+
+# plot risk after sampling: Non-detection
+p3 <-
+  ggplot(data = plot_dat,
+       mapping = aes(x = spatial_location, y = R_after_no_detection)) +
+  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
+  ylab("Posterior risk (no detection)") +
+  xlab("One-dimensional location")
+
+# plot EIG
+p4 <-
+  ggplot(data = plot_dat,
+       mapping = aes(x = spatial_location, y = eig_value)) +
+  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
+  ylab("Expected Information Gain (nats)") +
+  xlab("One-dimensional location") 
+
+p1234 <- (p1 + p2) / (p3 + p4) & theme_bw()
+p1234
+```
+
+```{r}
+# plot prior probability of occurrence
+p1 <-
+  ggplot(data = plot_dat,
+       mapping = aes(x = spatial_location, y = prior_psi)) +
+  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
+  ylab("Prior probability of occurrence") +
+  xlab("One-dimensional location")
+
+p2 <-
+  ggplot(data = plot_dat,
+       mapping = aes(x = spatial_location, y = post_det_psi)) +
+  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
+  ylab("Posterior probability of occurrence (detection)") +
+  xlab("One-dimensional location")
+
+p3 <-
+  ggplot(data = plot_dat,
+       mapping = aes(x = spatial_location, y = post_no_det_psi)) +
+  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
+  ylab("Posterior probability of occurrence (non-detection)") +
+  xlab("One-dimensional location")
+
+p1 + p2 + p3 & theme_bw()
+```
+
+
+
+
 
 **More protected areas and more species**
 
