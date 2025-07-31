@@ -8,7 +8,7 @@ editor: source
 
 This is a minimal working example for how the **AIRIES** (*Adaptive Invasion-Risk Intelligence for Protected Areas with eDNA Surveillance*) project is envisioned to work.
 
-Consider a single protected area (e.g. "pa_1") and a single invasive species ("sp_1"). Moreover, let's consider a simple one-dimensional landscape with 10 grid-cells or "sites" where "site_1", "site_2" and "site_3" form the protected area (i.e. "pa_1"):
+Consider a single protected area (e.g. "pa_1") and a single invasive species ("sp_1"). Moreover, let's consider a simple one-dimensional landscape with N grid-cells or "sites" where some sites (e.g. "site_1", "site_2" and "site_3") form the protected area (i.e. "pa_1"):
 
 ```{r}
 # number of locations
@@ -39,7 +39,7 @@ grid <- dplyr::select(grid, site, spatial_location, pa, pa_in)
 head(grid)
 ```
 
-This data.frame shows 10 sites ("site_1" to "site_10") at a numeric spatial location for "pa_1" and shows that "site_1", "site_2" and "site_3" are within "pa_1" (i.e. pa_in == 1). The data is set-up in this way so that it is easy to estimate the influence of all grid-cells on a given protected area.
+This data.frame shows N sites at a numeric spatial location for "pa_1" and shows that some sites are within "pa_1" (i.e. pa_in == 1). The data is set-up in this way so that it is easy to estimate the influence of all grid-cells on a given protected area.
 
 Next, we define a simple dispersal kernel based on how far each grid-cell is from the focal protected area (i.e. "pa_1"). For this, we first calculate the distance between each site and the centroid of the focal protected area (in one-dimension, the centroid is simply the mean). Grid-cells that comprise the protected area (i.e. "site_1", "site_2" and "site_3") are given distances from the focal protected area of 0. 
 
@@ -80,10 +80,9 @@ grid_pa <- dplyr::filter(grid, pa_in == 1)
 grid <- dplyr::filter(grid, pa_in == 0)
 ```
 
-
 The next piece of information is the prior distribution that grid-cell $i$ is occupied by the focal species. We would typically derive this using a logistic-regression model of known presence-absence data (i.e. a kind of species distribution model) fit in a Bayesian framework where $y_i$ is the presence (1) or absence (0) of the species in grid-cell i. Therefore, we would approximate the posterior probability distribution $p(\psi_i | y_i)$ using posterior samples ($\psi_i^{(s)} \text{ where }s = 1,...,S$). Note that while this is technically a posterior distribution, we will use it as the **prior distribution** of species occupancy for each grid-cell.
 
-We draw the samples ($\psi_i^{(s)} \text{ where }s = 1,...,S$) from a Beta distribution. The mean of a beta distribution is given by a mean ($\mu$) and a precision parameter ($\kappa$):
+To simulate this, we draw the samples ($\psi_i^{(s)} \text{ where }s = 1,...,S$) from a Beta() distribution. The mean of a beta distribution is given by a mean ($\mu$) and a precision parameter ($\kappa$):
 
 $$
 \mu = \frac{\alpha}{\alpha + \beta}
@@ -211,7 +210,6 @@ for (i in seq_along(R_list)) {
 
 # rename the list
 names(kde_list) <- names(R_list)
-
 ```
 
 We can then use the Monte Carlo approximation of the integral to calculate entropy:
@@ -233,17 +231,11 @@ $$
 \mathbb{E}_{R_{i,p}}[R_{i,p}] = \frac{1}{n} \times \sum(R_{i,p} = r_{i,p})
 $$
 
-From these expected values for each grid-cell, we can calculate the overall risk score for the focal protected area (i.e. "pa_1") as:
-
-$$
-R^{tot}_{p} = \sum \mathbb{E}_{R_{i,p}}[R_{i,p}]
-$$
-
-For example, we could do the following to calculate the overall risk score of the grid
+For example, we could calculate the expected risk score from each grid cell to the protected area:
 
 ```{r}
 # calculate the overall risk score for pa_1
-sum(sapply(R_list, mean))
+sapply(R_list, mean)
 ```
 
 This framework and the methods discussed so far provide a baseline for how we will quantify the probability of occurrence of each species for a given protected area and also the way that we will apply information theory concepts.
@@ -274,19 +266,9 @@ $$
 D_{KL} = \mathbb{E}\biggl[log\frac{\hat{f}(R_{i,p,\text{after}}^{(s)})}{\hat{f}(R_{i,p,\text{before}}^{(s)})}\biggr]
 $$
 
-#### Change in risk
-
-This is still under development...
-
-Information about risk is important. However, we also want to asymmetrically value risk. Imagine we have grid-cell $i$ which, based on current information, has low risk to protected area $p$. Let's say a detection of the species would cause a small relative decrease in risk but a large relative 
-
-We simulate taking an eDNA sample
-
-If taking an eDNA sample (i.e. detection or non-detection) will increase the risk from grid-cell $i$ to protected area $p$, then this is more valuable to know than if the risk will decrease. An increase in risk could demand action, a decrease in risk is good to know but does not necessarily cause action.
-
 #### Decision theory
 
-Calculating KL-divergence and $\Delta \text{risk}$ in each grid-cell, we can produce a map of where sampling would lead to the greatest information gain and change in average risk. Based on this map, we can use optimisation algorithms to then prioritise sites.
+Calculating KL-divergence and $\Delta \text{risk}$ in each grid-cell, we can produce a map of where sampling would lead to the greatest information gain. Based on this map, we can use optimisation algorithms to then prioritise sites.
 
 ### Observation model
 
@@ -296,7 +278,7 @@ $$
 R_{i,p}^{(s)} = \psi_i^{(s)} \cdot w_{species} \cdot w_{site} \cdot K_{i,p}
 $$
 
-Therefore, to update the distribution, we simply need to update the $psi_i$ values as the rest are constants:
+Therefore, to update the distribution, we simply need to update the $psi_i$ values as the other parameters do not change for a given grid-cell, species and protected area combination:
 
 $$
 R_{i,p,updated}^{(s)} = \psi_{i, updated}^{(s)} \cdot w_{species} \cdot w_{site} \cdot K_{i,p}
@@ -557,6 +539,7 @@ for (i in seq_along(psi_prior_list)) {
   eig_list[[i]] <- dplyr::tibble(site = grid$site[i],
                                  sample = seq_along(eig),
                                  prior_psi = psi_prior_list[[i]],
+                                 p_det = p_det_list[[i]],
                                  post_det_psi = psi_post_det_list[[i]],
                                  post_no_det_psi = psi_post_no_det_list[[i]],
                                  R_initial = R_list[[i]],
@@ -567,131 +550,313 @@ for (i in seq_along(psi_prior_list)) {
 }
 ```
 
-Plot the **expected information gain** of sampling in the different grid-cells relative to our theoretical protected area:
+### Visualise the results
+
+We can now visualise and interpret these simulations and what they mean for how our metrics of information inform our sampling. We start by visualising the prior probability of occurrence, the probability of detection and the posterior probabilities of occurrence in scenarios of detection and non-detection.
 
 ```{r}
-# load the plotting function
+# load the relevant plotting libraries
+source(here::here("theme-meta.R"))
 library(ggplot2)
 library(patchwork)
+library(rlang)
 
-# bind into a data.frame and join
+# create a data.frame for plotting
 plot_dat <-
   dplyr::left_join(grid, dplyr::bind_rows(eig_list), by = "site")
 
-# plot prior risk
-p1 <-
-  ggplot(data = plot_dat,
-       mapping = aes(x = spatial_location, y = R_initial)) +
-  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
-  ylab("Prior risk") +
-  xlab("One-dimensional location")
-
-# plot risk after sampling: Detection
-p2 <-
-  ggplot(data = plot_dat,
-       mapping = aes(x = spatial_location, y = R_after_detection)) +
-  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
-  ylab("Posterior risk (detection)") +
-  xlab("One-dimensional location")
-
-# plot risk after sampling: Non-detection
-p3 <-
-  ggplot(data = plot_dat,
-       mapping = aes(x = spatial_location, y = R_after_no_detection)) +
-  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
-  ylab("Posterior risk (no detection)") +
-  xlab("One-dimensional location")
-
-# plot EIG
-p4 <-
-  ggplot(data = plot_dat,
-       mapping = aes(x = spatial_location, y = eig_value)) +
-  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
-  ylab("Expected Information Gain (nats)") +
-  xlab("One-dimensional location") 
-
-p1234 <- (p1 + p2) / (p3 + p4) & theme_bw()
-p1234
+# get the centroid of the protected area
+pa_centroid <- mean(grid_pa$spatial_location)
 ```
 
 ```{r}
-# plot prior probability of occurrence
-p1 <-
-  ggplot(data = plot_dat,
-       mapping = aes(x = spatial_location, y = prior_psi)) +
-  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
-  ylab("Prior probability of occurrence") +
-  xlab("One-dimensional location")
+# function for plotting
+px_func <- function(data, x, y, x_lab, y_lab, pa_location) {
+  
+  px <-
+    ggplot(data = data,
+           mapping = aes(x = !!sym(x), y = !!sym(y))) +
+    ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05, alpha = 0.25) +
+    ylab(y_lab) +
+    xlab(x_lab) +
+    geom_vline(xintercept = pa_location, colour = "red", linetype = "dashed")
+  
+  px
+  
+}
 
-p2 <-
-  ggplot(data = plot_dat,
-       mapping = aes(x = spatial_location, y = post_det_psi)) +
-  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
-  ylab("Posterior probability of occurrence (detection)") +
-  xlab("One-dimensional location")
+# prior psi
+p1 <- px_func(data = plot_dat, x = "spatial_location", y = "prior_psi",
+              x_lab = "One-dimensional location", y_lab = "Prior psi",
+              pa_location = pa_centroid)
 
-p3 <-
-  ggplot(data = plot_dat,
-       mapping = aes(x = spatial_location, y = post_no_det_psi)) +
-  ggbeeswarm::geom_quasirandom(shape = 1, size = 0.5, width = 0.05) +
-  ylab("Posterior probability of occurrence (non-detection)") +
-  xlab("One-dimensional location")
+# probability of detection
+p2 <- px_func(data = plot_dat, x = "spatial_location", y = "p_det",
+              x_lab = "One-dimensional location", y_lab = "P(detection)",
+              pa_location = pa_centroid)
 
-p1 + p2 + p3 & theme_bw()
+# posterior probability given detection
+p3 <- px_func(data = plot_dat, x = "spatial_location", y = "post_det_psi",
+              x_lab = "One-dimensional location", y_lab = "Posterior psi (detection)",
+              pa_location = pa_centroid)
+
+# posterior probability given non-detection
+p4 <- px_func(data = plot_dat, x = "spatial_location", y = "post_no_det_psi",
+              x_lab = "One-dimensional location", y_lab = "Posterior psi (non-detection)",
+              pa_location = pa_centroid)
+
+(p1 + p2) / (p3 + p4) & theme_meta()
+
 ```
 
-
-
-
-
-**More protected areas and more species**
-
-This example is based on one species and one protected area. However, the idea behind **AIRIAS** is to do this for more than 40 different invasive alien species across the Natura 2000 network of Belgium. Therefore, for each grid cell, for each species and each protected area, there will be some EVS value. Our proposed sampling scheme will then need to prioritise sites that provide maximum information value across species and protected areas given limited resources.
-
-Therefore, on top of this risk EVS model, we need a prioritisation algorithm that attempts to balance EVS gains for different protected areas and species.
-
-To simulate this, we will simply assign random EVS values to sites for different species and protected areas for testing and developing the algorithm.
+Plot the **expected information gain** of sampling in the different grid-cells relative to our theoretical protected area:
 
 ```{r}
-# simulate a full EVS dataset across protected areas and species
+# prior risk
+p1 <- px_func(data = plot_dat, x = "spatial_location", y = "R_initial",
+              x_lab = "One-dimensional location", y_lab = "Prior risk",
+              pa_location = pa_centroid)
 
-# number of species
+# probability of detection
+p2 <- px_func(data = plot_dat, x = "spatial_location", y = "p_det",
+              x_lab = "One-dimensional location", y_lab = "P(detection)",
+              pa_location = pa_centroid)
+
+# posterior risk: detection
+p3 <- px_func(data = plot_dat, x = "spatial_location", y = "R_after_detection",
+              x_lab = "One-dimensional location", y_lab = "Posterior risk (detection)",
+              pa_location = pa_centroid)
+
+# posterior risk: non-detection
+p4 <- px_func(data = plot_dat, x = "spatial_location", y = "R_after_no_detection",
+              x_lab = "One-dimensional location", y_lab = "Posterior risk (detection)",
+              pa_location = pa_centroid)
+
+# expected information gain
+p5 <- px_func(data = plot_dat, x = "spatial_location", y = "eig_value",
+              x_lab = "One-dimensional location", y_lab = "EIG",
+              pa_location = pa_centroid)
+
+p12345 <- (p1 + p2 + p3) / (p4 + p5) & theme_meta()
+p12345
+```
+
+### Optimisation modelling
+
+This example above is based on one species and one protected area. However, the idea behind **AIRIAS** is to do this for 50 different invasive alien species across the Natura 2000 network of Belgium. Therefore, for each grid cell, for each species and each protected area, there will be some **Expected Information Gain (EIG)** value. Our proposed sampling scheme will then need to prioritise sites that provide maximum information value across species and protected areas given limited resources.
+
+Basically, there are a set of optimal sites based on KL-divergence and on absolute risk change for a given species and protected area. Want to use the optimisation approach to select the optimum sites for as many species and protected area combinations.
+
+To simulate this, let's just assume that we have a distribution **Expected Information Gain (EIG)** values for all species and protected area combination. Then, let's say we take the mean EIG value for each grid-cell. For simplicity, we will draw these mean EIG values for each grid-cell and each species by protected combination from a truncated Normal() distribution:
+
+```{r}
+# select the number of species
 n_sp <- 10
 
-# number of protected areas
+# select the number of protected areas
 n_pa <- 5
 
-# number of sites
-n_sites <- 100
+# select the number of grid cells 
+n_grid <- 100
 
-# simulate datasets
-opt_grid <-
-  tidyr::expand_grid(species = paste0("sp_", seq_len(n_sp)),
-                     pa = paste0("pa_", seq_len(n_pa)),
-                     site = paste0("site_", seq_len(n_sites))) |>
-  dplyr::group_by(species, pa) |>
-  dplyr::mutate(EVS = runif(n = n_sites, 0.001, 0.1)) |>
-  dplyr::ungroup()
+# expand the grid
+sim_grid <- tidyr::expand_grid(species = paste0("sp_", 1:n_sp),
+                               protected_area = paste0("pa_", 1:n_pa),
+                               grid_cell = 1:n_grid)
 
-# check the data
-head(opt_grid)
+# draw mean EIG values for each grid cell for each species and each protected area
+sim_grid$eig_value <- rnorm(n = nrow(sim_grid), mean = 6, sd = 3)
+sim_grid$eig_value <- ifelse(sim_grid$eig_value <= 0, 0.05, sim_grid$eig_value)
+
+# check the distribution
+hist(sim_grid$eig_value)
 ```
 
-Let's say that we can only sample 10 sites. Our goal is to protect all the different protected areas and maximise the EVS across species. The simplest way to do this is using a *greedy* approach where the EVS values are simply across protected areas and species for each site. We then rank the sites. This approach has no constraints and simply selects sites that give the most information across protected areas and species.
+Now that we have our simulated data, we can make the idea more precise. We want to identify an efficient eDNA sampling design that maximises information about the risk to Belgium's protected areas. For this, we use the `ompr` package. Our objective is to select a limited number of grid-cells to sample that, together, provide the greatested EIG across multiple species and protected areas. 
+
+Let:
+
+- \( G \): the set of candidate grid cells
+- \( C \): the set of all species–protected area combinations
+- \( P \): the set of protected areas
+- \( EIG_{gc} \): the expected information gain (EIG) for grid cell \( g \) in combination \( c \)
+
+We define two sets of binary decision variables:
+
+- \( y_g = 1 \) if grid cell \( g \in G \) is selected; 0 otherwise  
+- \( z_c = 1 \) if species–PA combination \( c \in C \) is covered by at least one selected grid cell; 0 otherwise
+
+Our objective is then to maximise:
+
+\[
+\text{Maximise } \sum_{c \in C} \sum_{g \in G_c} EIG_{gc} \cdot y_g
+\]
+
+Where \( G_c \subseteq G \) is the subset of grid cells with top-ranked EIG for combination \( c \).  
+This ensures that selected grid cells contribute the **highest possible cumulative information gain** across species and protected areas.
+
+In addition, we set the following constraints to make sure that we sample in a way that makes sure we balance protected area coverage:
+
+1. **Sample size constraint**  
+Select exactly \( X \) grid cells (e.g. 20):
+
+\[
+\sum_{g \in G} y_g = X
+\]
+
+2. **Combination coverage constraint**  
+A species–PA combination is considered “covered” if **at least one** of its associated top-EIG grid cells is
+selected:
+
+\[
+z_c \leq \sum_{g \in G_c} y_g \quad \forall c \in C
+\]
+
+3. **Protected area coverage constraint**  
+At least one species–PA combination must be covered for **every protected area** \( p \in P \):
+
+\[
+\sum_{c \in C_p} z_c \geq 1 \quad \forall p \in P
+\]
+
+Where \( C_p \subseteq C \) is the set of combinations associated with protected area \( p \).
+
+Given this optimisation framework, we can run the optimisation model and get the selected grid-cells:
 
 ```{r}
-# sum EVS across species and, per site:
-site_scores <- 
-  opt_grid |>
-  dplyr::group_by(site) |>
-  dplyr::summarise(EVS_total = sum(EVS)) |>
-  dplyr::arrange(dplyr::desc(EVS_total))
+library(dplyr)
+library(ompr)
+library(ompr.roi)
+library(ROI.plugin.glpk)
 
-# pick the top 10 sites:
-selected_sites <- site_scores |> dplyr::slice_head(n = 10)
+# get highest eig cells for each species x pa combination
+eig10 <- 
+  sim_grid |>
+  dplyr::group_by(species, protected_area) |>
+  dplyr::slice_max(eig_value, n = 10, with_ties = FALSE) |>
+  dplyr::ungroup()
 
-# check the 10 selected sites
-selected_sites
+# create combination ID
+eig10 <- 
+  eig10 |>
+  dplyr::mutate(comb_id = paste(species, protected_area, sep = "_"),
+                grid_id = as.character(grid_cell))
+
+# Index grid cells and combinations
+grid_levels <- unique(eig10$grid_id)
+comb_levels <- unique(eig10$comb_id)
+pa_levels <- unique(eig10$protected_area)
+
+eig10 <- 
+  eig10 |>
+  dplyr::mutate(grid_index = match(grid_id, grid_levels),
+                comb_index = match(comb_id, comb_levels),
+                pa_index = match(protected_area, pa_levels))
+
+n_grid <- length(grid_levels)
+n_comb <- length(comb_levels)
+n_pa <- length(pa_levels)
+
+# how many sites can be sampled?
+sample_size <- 5
+
+# combinations per PA (for the PA coverage constraint)
+pa_to_combs <- split(eig10$comb_index, eig10$pa_index)
+
+# build the model
+model <- MIPModel() %>%
+  # Decision variables
+  add_variable(y[i], i = 1:n_grid, type = "binary") %>%
+  add_variable(z[j], j = 1:n_comb, type = "binary") %>%
+
+  # Objective: maximise weighted EIG
+  set_objective(
+    sum_expr(eig10$eig_value[k] * y[eig10$grid_index[k]], k = 1:nrow(eig10)),
+    "max"
+  ) %>%
+
+  # Select exactly sample_size grid cells
+  add_constraint(sum_expr(y[i], i = 1:n_grid) == sample_size) %>%
+
+  # z[j] ≤ sum of y[i] for associated grid cells
+  add_constraint(
+    z[j] <= sum_expr(y[eig10$grid_index[k]], k = which(eig10$comb_index == j)),
+    j = 1:n_comb
+  ) %>%
+
+  # For each PA, at least one of its z[j] is selected
+  add_constraint(
+    sum_expr(z[j], j = pa_to_combs[[as.character(p)]]) >= 1,
+    p = names(pa_to_combs)
+  )
+
+
+# Solve model
+result <- solve_model(model, with_ROI(solver = "glpk"))
+
+# check the cells that were chosen
+selected_cells <- 
+  get_solution(result, y[i]) |>
+  filter(value == 1) |>
+  mutate(grid_id = grid_levels[i])
+
+# check the covered combinations
+covered_combinations <- 
+  get_solution(result, z[j]) |>
+  filter(value == 1) |>
+  mutate(comb_id = comb_levels[j])
+
 ```
 
-A second approach would be to add constraints such as covering each protected area (i.e. EVS values computed from the perspective of that protected area).
+We can visualise which cells were chosen relative to random samples of grid-cells:
+
+```{r}
+# get all the data and label as all
+dat_all <-
+  eig10 |>
+  dplyr::mutate(variable = "all") |>
+  dplyr::select(grid_id, eig_value, variable)
+
+# randomly sample N cells X separate times
+X <- 5
+random_sample <- 
+  lapply(1:X, function(x) {
+    sample(unique(dat_all$grid_id), size = sample_size)
+  })
+
+# get the optimised cells
+dat_chosen <-
+  eig10 |>
+  dplyr::filter(grid_cell %in% selected_cells$grid_id) |>
+  dplyr::mutate(variable = "selected",
+                random_sample = 99) |>
+  dplyr::select(grid_id, eig_value, variable)
+
+# get these random samples
+dat_compare <-
+  lapply(1:length(random_sample), function(x) {
+    dplyr::filter(dat_all, grid_id %in% random_sample[[x]]) |>
+      mutate(random_sample = x)
+  })
+
+# bind together and compare
+dat_compare <- 
+  dplyr::bind_rows(dplyr::bind_rows(dat_compare), 
+                   dat_chosen)
+
+# plot the data
+ggplot(data = dat_compare |> dplyr::mutate(random_sample = as.character(random_sample)),
+       mapping = aes(x = variable, y = eig_value, colour = random_sample)) +
+  geom_point(position = position_dodge(width = 0.2)) +
+  xlab(NULL) +
+  ylab("Expected Information Gain") +
+  theme_meta() +
+  theme(legend.position = "none")
+```
+
+
+
+
+
+
+
