@@ -1,4 +1,5 @@
 
+See the html preview [here](https://htmlpreview.github.io/?https://raw.githubusercontent.com/haganjam/marie-curie-prop/refs/heads/main/document/proposal-document.html?token=GHSAT0AAAAAADDDF4PUYKTDMWRQXI3RAHPY2EMYQWQ)
 
-See the html preview [here](https://htmlpreview.github.io/?https://github.com/haganjam/marie-curie-prop/blob/main/document/proposal-document.html)
+
 
