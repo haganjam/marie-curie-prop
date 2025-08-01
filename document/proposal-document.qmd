@@ -3,6 +3,8 @@ title: "Marie-Curie post-doc proposal"
 format: 
   html:
     embed-resources: true
+html-math-method: 
+  method: katex
 editor: source
 ---
 
