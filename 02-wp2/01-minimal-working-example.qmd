@@ -41,7 +41,7 @@ head(grid)
 
 This data.frame shows N sites at a numeric spatial location for "pa_1" and shows that some sites are within "pa_1" (i.e. pa_in == 1). The data is set-up in this way so that it is easy to estimate the influence of all grid-cells on a given protected area.
 
-Next, we define a simple dispersal kernel based on how far each grid-cell is from the focal protected area (i.e. "pa_1"). For this, we first calculate the distance between each site and the centroid of the focal protected area (in one-dimension, the centroid is simply the mean). Grid-cells that comprise the protected area (i.e. "site_1", "site_2" and "site_3") are given distances from the focal protected area of 0. 
+Next, we define a simple dispersal kernel based on how far each grid-cell is from the focal protected area (i.e. "pa_1"). For this, we first calculate the distance between each site and the centroid of the focal protected area (in one-dimension, the centroid is simply the mean). Grid-cells that comprise the protected area (i.e. "site_1", "site_2" and "site_3") are given distances from the focal protected area of 0.
 
 ```{r}
 # calculate distance
@@ -147,10 +147,7 @@ $$
 
 Where:
 
-$\psi_i^{(s)}$ is the probability that a focal species is present in cell $i$ given sample $s$ \\ 
-$w_{species}$ is a weight describing the potential ecological damage of the species \\ 
-$w_{site}$ is a weight describing the ecological value of the protected area \\ 
-$K_{i,p}$ is the dispersal kernel
+$\psi_i^{(s)}$ is the probability that a focal species is present in cell $i$ given sample $s$ \\ $w_{species}$ is a weight describing the potential ecological damage of the species \\ $w_{site}$ is a weight describing the ecological value of the protected area \\ $K_{i,p}$ is the dispersal kernel
 
 ```{r}
 # set the species weight
@@ -268,7 +265,7 @@ $$
 
 #### Decision theory
 
-Calculating KL-divergence and $\Delta \text{risk}$ in each grid-cell, we can produce a map of where sampling would lead to the greatest information gain. Based on this map, we can use optimisation algorithms to then prioritise sites.
+Calculating KL-divergence in each grid-cell, we can produce a map of where sampling would lead to the greatest information gain. Based on this map, we can use optimisation algorithms to then prioritise sites.
 
 ### Observation model
 
@@ -288,11 +285,11 @@ To do this, we need an **observation model** of how eDNA detections ($y_{ij}$) i
 
 $$
 y_{ij} \sim Bernoulli(p_{i})
-$$ 
+$$
 
 $$
 p_{i} = z_i \times (1 - \theta^{FN}_{field}) \times (1 - \theta^{FN}_{lab}) + (1 - z_i) \times \theta^{FP}_{lab}
-$$ 
+$$
 
 Where:
 
@@ -480,10 +477,9 @@ for (i in seq_len(nrow(grid))) {
 names(R_no_det_list) <- grid$site
 ```
 
-
 ### Estimate information gain
 
-With samples from the posterior distribution of the risk to protected area $p$ from grid-cell $i$ under scenarios of detection ($R_{i,p,updated: \text{ detection}}^{(s)} $) and non-detection ($R_{i,p,updated: \text{ non-detection}}^{(s)}$), we can compute the KL-divergence under both these scenarios not that $\hat{f}$ denotes the kernel density estimated distribution:
+With samples from the posterior distribution of the risk to protected area $p$ from grid-cell $i$ under scenarios of detection (\$R\_{i,p,updated: \text{ detection}}\^{(s)} $) and non-detection ($R\_{i,p,updated: \text{ non-detection}}\^{(s)}\$), we can compute the KL-divergence under both these scenarios not that $\hat{f}$ denotes the kernel density estimated distribution:
 
 $$
 D_{KL, \text{ detection}} = \mathbb{E}\biggl[log\frac{\hat{f}(R_{i,p,updated: \text{ detection}}^{(s)})}{\hat{f}(R_{i,p,before}^{(s)})}\biggr]
@@ -672,54 +668,45 @@ sim_grid$eig_value <- ifelse(sim_grid$eig_value <= 0, 0.05, sim_grid$eig_value)
 hist(sim_grid$eig_value)
 ```
 
-Now that we have our simulated data, we can make the idea more precise. We want to identify an efficient eDNA sampling design that maximises information about the risk to Belgium's protected areas. For this, we use the `ompr` package. Our objective is to select a limited number of grid-cells to sample that, together, provide the greatested EIG across multiple species and protected areas. 
+Now that we have our simulated data, we can make the idea more precise. We want to identify an efficient eDNA sampling design that maximises information about the risk to Belgium's protected areas. For this, we use the `ompr` package. Our objective is to select a limited number of grid-cells to sample that, together, provide the greatested EIG across multiple species and protected areas.
 
 Let:
 
-- \( G \): the set of candidate grid cells
-- \( C \): the set of all species–protected area combinations
-- \( P \): the set of protected areas
-- \( EIG_{gc} \): the expected information gain (EIG) for grid cell \( g \) in combination \( c \)
+-   ( G ): the set of candidate grid cells
+-   ( C ): the set of all species--protected area combinations
+-   ( P ): the set of protected areas
+-   ( EIG\_{gc} ): the expected information gain (EIG) for grid cell ( g ) in combination ( c )
 
 We define two sets of binary decision variables:
 
-- \( y_g = 1 \) if grid cell \( g \in G \) is selected; 0 otherwise  
-- \( z_c = 1 \) if species–PA combination \( c \in C \) is covered by at least one selected grid cell; 0 otherwise
+-   ( y_g = 1 ) if grid cell ( g \in G ) is selected; 0 otherwise\
+-   ( z_c = 1 ) if species--PA combination ( c \in C ) is covered by at least one selected grid cell; 0 otherwise
 
 Our objective is then to maximise:
 
-\[
-\text{Maximise } \sum_{c \in C} \sum_{g \in G_c} EIG_{gc} \cdot y_g
-\]
+\[ \text{Maximise } \sum\*{c\* \\in C} \sum{g \in G_c} EIG\_{gc} \cdot y_g \]
 
-Where \( G_c \subseteq G \) is the subset of grid cells with top-ranked EIG for combination \( c \).  
+Where ( G_c \subseteq G ) is the subset of grid cells with top-ranked EIG for combination ( c ).\
 This ensures that selected grid cells contribute the **highest possible cumulative information gain** across species and protected areas.
 
 In addition, we set the following constraints to make sure that we sample in a way that makes sure we balance protected area coverage:
 
-1. **Sample size constraint**  
-Select exactly \( X \) grid cells (e.g. 20):
+1.  **Sample size constraint**\
+    Select exactly ( X ) grid cells (e.g. 20):
 
-\[
-\sum_{g \in G} y_g = X
-\]
+\[ \sum\_{g \in G} y_g = X \]
 
-2. **Combination coverage constraint**  
-A species–PA combination is considered “covered” if **at least one** of its associated top-EIG grid cells is
-selected:
+2.  **Combination coverage constraint**\
+    A species--PA combination is considered "covered" if **at least one** of its associated top-EIG grid cells is selected:
 
-\[
-z_c \leq \sum_{g \in G_c} y_g \quad \forall c \in C
-\]
+\[ z_c \leq \sum\_{g \in G_c} y_g \quad \forall c \in C \]
 
-3. **Protected area coverage constraint**  
-At least one species–PA combination must be covered for **every protected area** \( p \in P \):
+3.  **Protected area coverage constraint**\
+    At least one species--PA combination must be covered for **every protected area** ( p \in P ):
 
-\[
-\sum_{c \in C_p} z_c \geq 1 \quad \forall p \in P
-\]
+\[ \sum\_{c \in C_p} z_c \geq 1 \quad \forall p \in P \]
 
-Where \( C_p \subseteq C \) is the set of combinations associated with protected area \( p \).
+Where ( C_p \subseteq C ) is the set of combinations associated with protected area ( p ).
 
 Given this optimisation framework, we can run the optimisation model and get the selected grid-cells:
 
@@ -853,10 +840,3 @@ ggplot(data = dat_compare |> dplyr::mutate(random_sample = as.character(random_s
   theme_meta() +
   theme(legend.position = "none")
 ```
-
-
-
-
-
-
-

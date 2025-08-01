@@ -1,0 +1,303 @@
+---
+title: "Marie-Curie post-doc proposal"
+format: 
+  html:
+    embed-resources: true
+editor: source
+---
+
+# Part B-1 (maximum of 10 pages, Times New Roman, font-size = 11)
+
+## 1.  Excellence
+
+### 1.1 Quality and pertinence of the project’s research and innovation objectives (and the extent to which they are ambitious, and go beyond the state of the art)
+
+One of the biggest threats to Europe’s biodiversity are invasive alien species. Europe’s societies are driven by trade and transport from across the globe. This causes organisms to be moved to novel areas where they can establish and become invasive (i.e. cause substantial harm to biodiversity and/or ecosystem services). Protected areas (such as the Natura 2000 network) were introduced to protect Europe’s native biodiversity and are, in many cases, refuges for threatened species. However, this means that it is crucial that these protected areas remain free of IAS.
+
+Controlling and/or stopping the spread of IAS is challenging and, in many cases, impossible once a species becomes established. However, decades of research has shown that preventing invasions is possible if species are detected early enough. Environmental DNA (eDNA: DNA present in water, in soil or even in the air) methods are highly sensitive and can detect species when they are at very low abundance (i.e. before they become established). Therefore, a surveillance system using eDNA methods could be a useful tool for catching prospective IAS early and preventing their spread into Europe’s protected areas.
+
+Environmental monitoring always faces the problem of resource limitations. As such, an eDNA-based surveillance system would need to balance resource constraints and be able to collect information in a way that will provide the most possible information about the risk of prospective IAS to protected areas. In this project, using Belgium as a test-case, I will develop an eDNA-based IAS surveillance system that uses information theory to identify sets of sampling sites that will optimally allocate limiting sampling resources to maximise information about the risk of prospective IAS to protected areas. This system can then be used to guide IAS management or further sampling.
+
+I call this project AIRIES (Adaptive Invasion-Risk Intelligence for Protected Areas with eDNA Surveillance) and it is structured around four measurable, verifiable and achievable R&I objectives:
+
+**Objective 1:** Model the risk of 50 prospective IAS (i.e. species that are not yet present in Belgium or have a very isolated range) to the Natura 2000 network of Belgium using environmental data, dispersal kernels and expert assessments of species’ potential impact.
+
++ **Target deliverable 1:** Publicly available spatial risk maps for the 50 prospective IAS (GeoTIFF
+files) and an interactive web dashboard where these risk maps can be visualised and queried.
+
+**Objective 2:** Develop an information theory algorithm that quantifies how much additional information about the risk of IAS to the Natura 2000 is obtained by taking eDNA samples in a specific location. Use this algorithm to identify priority for sites for eDNA sampling using optimisation modelling.
+
++ **Target deliverable 2:** Information theory algorithm and a list of locations in Belgium where new information will improve our ability to detect IAS in the Natura 2000 network. This tool will be integrated to the interactive web dashboard from objective 1.
+
+**Objective 3:** Build a metabarcoding reference database for these 50 prospective IAS using genetic databases and targeted field sampling.
+
++ **Target deliverable 3:** Curated and publically available metabarcoding reference database for these prospective IAS in Belgium for use in DNA metabarcoding.
+
+**Objective 4:** Collect eDNA samples at these priority locations, perform metabarcoding and taxonomic assignment using the reference database developed in objective 2 and develop a data ingestion pipeline that can feed back into the information theory algorithm developed in objective 3.
+
++ **Target deliverable 4:** eDNA samples from priority sites in Belgium identified in objective 3 and an update to the interactive web dashboard to allow the ingestion of samples from the priority, risk updating and priority site updating.
+
++ **Target deliverable 5:** A cost analysis of the eDNA sampling, sample processing, sequencing and risk updating pipeline to assess feasibility of scaling the AIRIES system.
+
+Given my background in biomonitoring, modeling and data science, these objectives are achievable and progress towards them can be clearly measured using the identified target deliverables (1-5). By completing these four objectives, AIRIES would become the first information-theory driven adaptive IAS surveillance system and it would be specifically tailored to safe-guard Europe’s protected area network from the increasing threat of IAS. Therefore, not only will AIRIES deliver novel research, it will deliver a working prototype of a surveillance system that, if successful, could be applied across Europe.
+
+### 1.2 Soundness of the proposed methodology (including interdisciplinary approaches, consideration of the gender dimension and other diversity aspects if relevant for the research project, and the quality of open science practices).
+
+The AIRIES project focuses on 50 prospective plant and mammal IAS in Belgium. These include IAS that experts deem likely to reach Belgium (e.g. grey squirrel: Sciurus carolinensis), IAS that are present in neighbouring countries but have not established in Belgium (e.g. the coastal succulent: Carpobrotus edulis) or IAS that are present in Belgium but have restricted ranges (e.g. the North American shrub: Baccharis halimifolia).
+
+#### WP1: Modeling the risk of new IAS in Belgium
+
+We start by rasterising Belgium into 1 x 1 km grid-cells (ca. 30000) using the ETRS89 / LAEA Europe Lambert Azimuthal Equal Area projection (EPSG:3035). The risk framework used in AIRIES defines the risk of a given IAS in grid-cell $i$ to protected area p as:
+
+$$
+R_{i,p} = \psi_i  \cdot w_{species} \cdot w_{site} \cdot K_{i,p}
+$$
+
+Where:
+
+$\psi_i$ is the probability that a focal species is present in cell $i$ [0, 1]
+$w_{species}$ is a weight describing the potential ecological damage of the species [0, 1]
+$w_{site}$ is a weight describing the ecological value of the protected area [0, 1]
+$K_{i,p}$ is the dispersal kernel describing the connectivity between grid-cell $i$ and protected area $p$ [0, 1].
+
+The $K_{i,p}$ dispersal kernel is an exponential kernel defined as follows where $d(i,p)$ is the distance between grid-cell $i$ and protected area $p$ and $\alpha$ is the mean dispersal distance of the species.
+
+$$
+K_{i,p} = exp(-d(i, p)/\alpha)
+$$
+
+This means that the risk of a given IAS from grid-cell $i$ to protected area $p$ is directly proportional to the probability that the IAS is present in grid-cell $i$ ($\psi_i$), the potential ecological damage of the species ($w_{species}$), the ecological value of the protected area ($w_{site}$) and how connected grid-cell $i$ is to protected area $p$. With this framework, we can obtain, for each IAS and protected area $p$, risk scores for each grid-cell ($R_{i,p}$) of Belgium.
+
+To estimate the $\psi_i$ (i.e. probability of occurrence of a given IAS in grid-cell $i$), we will use habitat suitability models fit in a Bayesian framework. These models will be trained on presence-absence (or pseudo-absence) data of the chosen IAS from their current range. Using this model, we will obtain samples from the posterior distribution of $\psi_i$ i.e. $\psi_i^{(s)}$, where the $^{(s)}$ indicates samples. Therefore, the distribution of values for a given grid-cell ($\psi_i^{(s)}$) represents our prior belief about where the IAS is likely to be present based on its current distribution and environmental preferences.
+
+The $w_{species}$ values will be based on expert assessments of IAS impacts via the Harmonia+ protocol. This protocol asks experts to rank, for example, environmental risk of a species on a five point scale: very low, low, medium, high, very high. Based on a number of similar questions about the risk a species poses, these are converted into a number between 0 and 1 and the scores are then aggregated to provide an overall impact score. To derive the $w_{site}$ values, we use the Standard Data Form for Natura 2000 sites to derive an ecological value index for each protected area ($w_{site}$). The $K_{i,p}$ dispersal kernel will be based on the distance between the centroid of grid-cell i and the centroid of protected area p. Where possible, average dispersal distances will be used.
+
+Using the $\psi_i^{(s)}$, $w_{species}$, $w_{site}$ and $K_{i,p}$, we will calculate the risk-score values for each grid-cell $i$ and protected area $p$ (i.e. $R_{i,p}$) for all of the focal IAS. These risk-scores will be based on all samples of $\psi_i^{(s)}$ and, as a result, for each grid-cell $i$ and protected area $p$, we will have a distribution of risk-score values: $R_{i,p}^{(s)}$. The risk-score maps per species and protected area will then be published as GeoTIFF files along with all code used for the analysis. In addition, we will wrap these risk-score maps into an interactive web application using RShiny that will allow various stakeholders (e.g. researchers, civil society, interested citizens etc.) to engage with the data and examine the risk of each IAS to a given protected area (i.e. target deliverable 1).
+
+#### WP2: Developing an information theory algorithm for optimal eDNA sampling
+
+In WP1, we will create maps of prior risk scores (i.e. $R_{i,p}^{(s)}$) for each IAS for each protected area $p$ from each grid-cell $i$. The next step in AIRIES is to determine the optimal locations for eDNA sampling that will maximise the amount of new information about the risk of a given IAS to protected area $p$ which is the focus of WP2. 
+
+At a general level, change in information can be quantified using the Kullback-Leibler divergence, a measure of the discrepancy between two probability distributions that quantifies the expected information gain when one revises their beliefs from a prior distribution to a posterior distribution. In this case, we can view our prior belief about the risk of a given IAS to protected area $p$ from grid-cell $i$ as $R_{i,p}^{(s)}$ which we now write as: $R_{i,p,\text{prior}}^{(s)}$. We then update this belief by taking and analysing eDNA samples which gives a new distribution of risk scores: $R_{i,p,\text{updated}}^{(s)}$. We can then compute the Kullback-Leibler divergence between these distributions to calculate the change in information about the risk from a given IAS to protected area $p$ from taking and analysing an eDNA sample in a given grid-cell $i$.
+
+To estimate $R_{i,p,\text{updated}}^{(s)}$ (i.e. the updated risk-score following eDNA sampling and analysis), requires simulating the likely information we will obtain from eDNA sampling and analysis. This requires an observational model of how the presence or absence of a given IAS along with measurement error determines eDNA detections. We propose the following observation model where eDNA detections ($y_ij$) in sample ($j$) and grid-cell ($i$) translate to the probability of detection ($p_i$) as:
+
+$$
+y_{ij} \sim Bernoulli(p_{i})
+$$
+
+$$
+p_{i} = z_i \times (1 - \theta^{FN}_{field}) \times (1 - \theta^{FN}_{lab}) + (1 - z_i) \times \theta^{FP}_{lab}
+$$
+
+Where:
+
+$z_i$: true presence (1) or true absence (0)
+
+$\theta^{FN}_{field}$ false negative rate in the field (i.e. non-detection when an IAS is present). Therefore, 1 - $\theta^{FN}_{field}$ is the true positive rate in the field (i.e. the probability that an IAS is detected when it is present).
+
+$\theta^{FN}_{lab}$ false negative rate in the lab (i.e. non-detection when an IAS is present in the sample). Therefore, 1 - $\theta^{FN}_{lab}$ is the true positive rate in the lab (i.e. the probability that an IAS is detected following PCR when its DNA is present).
+
+$\theta^{FP}_{lab}$ false positive rate in the lab (i.e. detection when an IAS is absent from the sample which can occur via, for example, contamination).
+
+With this as our underlying observational process model, we can use Bayesian updating to determine how the prior probability of occurrence estimated in WP1 (i.e. $\psi_i$ which we now denote as $\psi_{i,prior}$) and, therefore, the risk-score would change if we sampled eDNA. For this, we use Bayes’ rule. More specifically, assume that we sample eDNA in grid-cell $i$ and obtain a positive detection for species A (i.e. $y_i = 1$). We calculate the posterior probability that species A is present (i.e. $z_i = 1$) in grid-cell $i$ using Bayes’ rule as follows:
+
+$$
+P(z_i=1|y_i = 1) = \frac{p_{11} \psi_{i,prior}}{p_{11} \psi_{i,prior} + p_{01}(1-\psi_{i,prior})}
+$$
+
+Where:
+
+$z_i \epsilon [0,1]$: true presence (1) or absence (0) of species A in grid-cell $i$ $y_i \epsilon [0,1]$: detection (1) or non-detection (0) of species A in grid-cell $i$
+
+$\psi_{i,prior} = P(z_i = 1)$: prior probability that species A is present in grid-cell $i$
+
+$p_{11} = P(y_i = 1|z_i = 1)P(z_i = 1) = (1 - \theta^{FN}_{field}) \cdot (1 - \theta^{FN}_{lab})$: true positive rate derived from the probability of false negatives in the field and lab.
+
+$p_{01} = P(y_i = 1|z_i = 0)P(z_i = 0) = \theta^{FP}_{lab}$: false positive rate derived from the probability of false positives in the lab
+
+However, there is also the possibility that the eDNA sampling results in non-detection (i.e. $y_i = 0$). We need to account for both possibilities. For this, we need to calculate the posterior probability that species A is present (i.e. $z_i = 1$) in grid-cell $s$ given non-detection (i.e. $y_i = 0$):
+
+$$
+P(z_s = 1|y_s = 0) = \frac{(1 - p_{11}) \psi_{i,prior}}{(1 - p_{11}) \psi_{i,prior} + (1 - p_{01})(1-\psi_{i,prior})}
+$$
+
+Using these simulated probabilities of occurrence for a given grid-cell $i$ under detection ($P(z_i=1|y_i = 1)$) and no detection ($P(z_i=1|y_i = 0)$) scenarios, we can calculate updated risk scores.
+
+Assuming detection, we get the following:
+
+$$
+P(z_i=1|y_i = 1) \sim \psi_{i, \text{ updated: detection}}^{(s)}
+$$
+
+$$
+R_{i,p, \text{ updated: detection}}^{(s)} = \psi_{i, \text{ updated: detection}}^{(s)} \cdot w_{species} \cdot w_{site} \cdot K_{i,p}
+$$
+
+Assuming non-detection, we get the following:
+
+$$
+P(z_i=1|y_i = 0) \sim \psi_{i, \text{ updated: non-detection}}^{(s)}
+$$
+
+$$
+R_{i,p,\text{ updated: non-detection}}^{(s)} = \psi_{i, \text{ updated: non-detection}}^{(s)} \cdot w_{species} \cdot w_{site} \cdot K_{i,p}
+$$
+
+With samples from the posterior distribution of the risk to protected area $p$ from grid-cell $i$ under scenarios of detection ($R_{i,p,\text{ updated: detection}}^{(s)}$) and non-detection ($R_{i,p,\text{ updated: non-detection}}^{(s)}$), we can compute the KL-divergence under both these scenarios. Note that $\hat{f}$ denotes the kernel density estimated distribution:
+
+$$
+D_{KL, \text{ detection}} = \mathbb{E}\biggl[log\frac{\hat{f}(R_{i,p,\text{ updated: detection}}^{(s)})}{\hat{f}(R_{i,p, \text{ prior}}^{(s)})}\biggr]
+$$
+
+$$
+D_{KL, \text{ non-detection}} = \mathbb{E}\biggl[log\frac{\hat{f}(R_{i,p, \text{ updated: non-detection}}^{(s)})}{\hat{f}(R_{i,p,\text{ prior}}^{(s)})}\biggr]
+$$
+
+The **Expected Information Gain** in grid-cell $i$ to the protected area $p$ ($EIG_i,p$) from sampling is then a weighted average of these two KL-divergences which is weighted by the probability of detection ($p_{det}$). The probability of detection is given by:
+
+$$
+p_{det} = P(y_s = 1) = p_{11}\psi + p_{01}(1 - \psi)
+$$
+
+Because $p_{det}$ is a distribution of samples (i.e. $p_{det}^{(s)}$), this results in a distribution of $EIG_i,p$ values i.e. ($EIG_{i,p}^{s}$):
+
+$$
+EIG_{i,p}^{s} = p_{det}^{(s)}\cdot D_{KL, \text{ detection}}  + (1 - p_{det}^{(s)}) \cdot D_{KL, \text{ non-detection}}
+$$
+
+This example above is based on one IAS and one protected area. However, the idea behind **AIRIES** is to do this for 50 different invasive alien species across the Natura 2000 network of Belgium. Therefore, we will calculate **Expected Information Gain** for each grid-cell, for each IAS and each protected area. We will then use optimisation modeling to prioritise sites that provide maximum information value across species and protected areas given that, due to resource limitation, we can only conduct eDNA sampling in a limited number of grid-cells. More specifically, our objective is to select a limited number of grid-cells to sample that, together, provide the greatest **Expected Information Gain** across multiple species and protected areas. Formally:
+
+$I$: the set of candidate grid cells
+$C$ the set of all species--protected area combinations
+$P$: the set of protected areas
+$EIG_{ic}$: the expected information gain (**EIG**) for grid cell $i$ in combination $c$.
+
+Next, we define two sets of binary decision variables:
+
+$y_i$ = 1 if grid cell $i \in I$ is selected; 0 otherwise
+$z_c$ = 1 ) if species-protected area combination $c \in C$ is covered by at least one selected grid-cell; 0 otherwise
+
+Our objective is then to maximise:
+
+$$
+\text{Maximise} \sum_{c \in C} \sum_{i \in I_c} EIG_{ic} \cdot y_i
+$$
+
+Where ( $I_c \subseteq I$ ) is subset of grid-cells for combination $c$ where the *EIG* value is greater than the 80% quantile. This optimisation algorithm therefore attempts to select grid-cells that contribute the **highest possible cumulative information gain** across species and protected areas. Additionally, we set the following constraints to make sure that we sample in a way that balances protected area coverage:
+
+**1. Sample size constraint:** Select exactly $X$ grid-cells:
+
+$$
+\sum_{i \in I} y_i = X
+$$
+
+**3. Combination coverage constraint:** A species by protected area combination is considered "covered" if **at least one** of its associated top-EIG grid cells is selected:
+
+$$
+z_c \leq \sum_{i \in I_c} y_i \quad \text{ for all } c \in C
+$$
+
+**3. Protected area coverage constraint:** At least one species by protected area combination must be covered for **every protected area** ($p \in P$) where $C_p \subseteq C$ is the set of combinations associated with protected area $p$:
+
+$$
+\sum_{c \in C_p} z_c \geq 1 \quad \text{ for all } p \in P
+$$
+
+Using our risk framework, information theory and optimisation modelling, we will be able to prioritise sites for eDNA sampling that will provide the maximum amount of information about the risk of Belgium's protected area network to prospective IAS. This information theory approach and optimisation algorithm will be integrated into the interactive RShiny web application (**target deliverable 1**) which will allow stakeholders to see where our approach suggests eDNA sampling given a set number of possible grid-cells to sample. Together, the development of the approach and the integration with the interactive web dashboard constitute **target deliverable 2**.
+
+::: {#fig-1}
+![](figures-tables/conceptual-figures/fig-1.png)
+
+Overview of the **AIRIES** information theory and optimisation algorithm for selecting sites for eDNA sampling and analysis that maximise information gain about the risk of IAS to Belgium’s protected area network. This figure relates to **WP1** and **WP2**.
+:::
+
+#### WP3: Building a metabarcoding reference database for the 50 prospective IAS
+
+To establish a comprehensive metabarcoding reference database for the 50 priority invasive alien species (IAS) most likely to be introduced to Belgium, we will employ a structured and rigorous approach combining existing genomic resources with targeted specimen collections. Initially, we will systematically query authoritative global databases, notably the Barcode of Life Data Systems (BOLD), GenBank, and European Nucleotide Archive (ENA), to compile all publicly available barcode sequences relevant to our focal species. Specifically, we will collect mitochondrial mammal-specific barcode sequences (mamS primers) for animals, and both nuclear (ITS2) and chloroplast (rbcL) barcode sequences for plants, thus ensuring accurate taxonomic identification across taxonomic groups.
+
+Following the compilation and initial gap analysis of available barcode data, we anticipate that certain invasive species will have incomplete or absent representation in these databases. To address this, we will conduct targeted field sampling campaigns within known invasion pathways and collaborate with herbarium collections and zoological archives to source specimens. Herbarium and museum collections, such as those held by the Meise Botanic Garden and the Royal Belgian Institute of Natural Sciences, will serve as essential sources of verified species vouchers, ensuring taxonomic accuracy and historical provenance.
+
+Specimens acquired from these sources will undergo standardized laboratory processing. DNA extraction protocols will follow best practices to maximize yield and quality, accommodating both contemporary and archival specimens. Subsequently, PCR amplification will be carried out using standardized primers (mamS for animals, ITS2 and rbcL for plants) optimized through preliminary trials to ensure high amplification success rates across diverse taxonomic groups. PCR products will then be sequenced via Sanger sequencing or high-throughput sequencing methods, depending on the number and complexity of samples, to generate high-quality barcode references.
+
+The resulting sequences will be rigorously quality-controlled, curated, and integrated into the reference database, accompanied by detailed metadata on specimen provenance, collection details, and voucher information. This carefully assembled and validated database will ultimately enable rapid and reliable detection of priority invasive alien species, significantly enhancing biosecurity and monitoring capacity in Belgium.
+
+
+
+
+#### WP4: 
+
+At each of the 30 sampling sites across Belgium, 24-hour air samples will be collected every three days over a 12-day summer sampling campaign, yielding four replicate samples per site. After collection, filters will be transported to the laboratory and handled exclusively in a clean-room facility under strict contamination control measures, including personal protective equipment and routine surface decontamination.
+All air samples will be processed for both mammalian and plant DNA using parallel metabarcoding workflows. DNA will be extracted using modified protocols adapted for air filter material. For mammal-targeted analyses, the DNeasy Blood & Tissue Kit (Qiagen) will be used; for plant analyses, the DNeasy Plant Mini Kit (Qiagen) will be applied. In both cases, filters will be placed into sterile 20 ml Luer-lock syringes using sterile forceps, sealed with Luer-lock fittings, and incubated at 55 °C for 3 hours with the appropriate lysis buffer and Proteinase K (for mammal extractions). Lysates will be expelled into sterile tubes and processed using standard spin-column protocols. Eluted DNA will be stored in DNA LoBind tubes at −20 °C.
+For mammal metabarcoding, we will amplify a ~95 bp fragment of the mitochondrial 16S rRNA gene using the mammal-specific primers 16Smam1 (forward) and 16Smam2 (reverse). To minimise amplification of non-target human DNA, a human-blocking primer will be included in all reactions.
+For plant metabarcoding, we will amplify the nuclear ribosomal Internal Transcribed Spacer region 2 (ITS2) using the ITS2-S2F (forward) and ITS4 (reverse) primers, yielding a fragment of approximately 300–460 bp suitable for species-level identification.
+To improve quantification and assess amplification efficiency, synthetic internal positive controls will be included in all PCR reactions. These controls will consist of DNA from species not native to Belgium but matching the primer binding sites. Each control will be added at three known concentrations (e.g. 10, 100, and 500 copies per reaction), enabling approximation of absolute abundances from metabarcoding read counts.
+Library preparation will follow a two-step PCR protocol. In the first step, target regions will be amplified using primers with overhang adapter sequences. Each sample will be amplified in triplicate, and the resulting products pooled and cleaned. In the second PCR step, dual-index barcodes and sequencing adaptors will be added. Final libraries will be sequenced using 2×300 bp paired-end chemistry on the AVITI platform (Element Biosciences).
+Taxonomic assignment will rely on a curated reference database comprising mammals and plants known to occur in Belgium or plausibly present at the sampling sites (e.g. through cultivation, food, or animal husbandry). Amplicon Sequence Variants (ASVs) will be inferred using the DADA2 pipeline, and taxonomic annotation will be performed using BLAST against the custom reference dataset. Only high-confidence matches will be retained for analysis.
+Metabarcoding read abundance data will be used to assess how airborne eDNA signals decay with distance from likely source locations across the sampled sites. Distance-decay patterns for both mammal and plant taxa will be analysed to determine detection limits and spatial signal strength, providing foundational data on the landscape-scale movement of airborne eDNA in natural and semi-natural habitats.
+
+#### Open science to the core
+
+**AIRIES** is, at its core an open science project.
+
+1. Sharing of all research materials (i.e. maintaining a publically available repository with all relevant research materials for a project: data, code, documentation etc.)
+
+2. Making research findings available as open-access scientific publications (e.g. via pre-prints or via initiatives such as Peer Community In or Peer Community Journal) and as publically available information that can be used by society.
+
+3. Collaboration with the target end-users which, in this case, are nature management organisations.
+
+
+
+
+### 1.3 Quality of the supervision, training and of the two-way transfer of knowledge between the researcher and the host
+
+Bram Vanschoenwinkel initiated the Barcoding for Chocolate project and is a collaborator on the International Barcode of Life project. 
+
+He works on biomonitoring and developing novel methods for 
+
+
+
+### 1.4 Quality and appropriateness of the researcher’s professional experience, competences and skills
+
+James Hagan is an experienced biodiversity scientist, programmer and statistical modeller. Moreover, he spent a year in industry as a data scientist where he furthered his programming and statistics skills and gained important knowledge about production-ready data pipelines and products.
+
+
+
+
+## 2. Impact
+
+### 2.1 Credibility of the measures to enhance the career perspectives and employability of the researcher and contribution to his/her skills development
+
+
+
+
+### 2.2 Suitability and quality of the measures to maximise expected outcomes and impacts, as set out in the dissemination and exploitation plan, including communication activities
+
+
+
+
+
+
+### 2.3. The magnitude and importance of the project’s contribution to the expected scientific, societal and economic impacts
+
+There is an advance in biomonitoring here by showing how information theory and Bayesian methods can contribute to prioritisation. Observation models and how they can be used to update our prior beliefs are also an interesting contribution I think.
+
+IAS have enormous economic and societal costs that are estimated in the billions each year in Europe. The AIRIES surveillance system will improve our ability to detect invasive species early and, therefore, avoid their impacts.
+
+
+
+
+
+
+## 3. Quality and Efficiency of the Implementation
+
+
+### 3.1 Quality and effectiveness of the work plan, assessment of risks and appropriateness of the effort assigned to work packages
+
+
+### 3.2 Quality and capacity of the host institutions and participating organisations, including hosting arrangements
+
+
+
+
+
