@@ -12,11 +12,11 @@ editor: source
 
 ### 1.1 Quality and pertinence of the project’s research and innovation objectives (and the extent to which they are ambitious, and go beyond the state of the art)
 
-One of the biggest threats to Europe’s biodiversity are invasive alien species (IAS). Europe’s societies are driven by trade and transport from across the globe. This causes organisms to be moved to novel areas where they can establish and become invasive (i.e. cause substantial harm to biodiversity and/or ecosystem services). Protected areas (such as the Natura 2000 network) were introduced to protect Europe’s native biodiversity and are, in many cases, refuges for threatened species. However, this means that it is crucial that these protected areas remain free of IAS.
+One of the biggest threats to Europe’s biodiversity are invasive alien species (IAS). Europe’s societies are driven by trade and transport from across the globe. This causes organisms to be moved to novel areas where they can establish and become invasive (i.e. cause substantial harm to biodiversity and/or ecosystem services). Protected areas (such as the Natura 2000 network) were introduced to protect Europe’s native biodiversity and are, in many cases, refuges for threatened species that are vulnerable to the threat of IAS. However, this means that it is crucial that these protected areas remain free of IAS.
 
 Controlling and/or stopping the spread of IAS is challenging and, in many cases, impossible once a species becomes established. However, decades of research has shown that preventing invasions is possible if species are detected early enough. Environmental DNA (eDNA: DNA present in water, in soil or even in the air) methods are highly sensitive and can detect species when they are at very low abundance (i.e. before they become established). Therefore, a surveillance system using eDNA methods could be a useful tool for catching prospective IAS early and preventing their spread into Europe’s protected areas.
 
-Environmental monitoring always faces the problem of resource limitations. As such, an eDNA-based surveillance system would need to balance resource constraints and be able to collect information in a way that will provide the most possible information about the risk of prospective IAS to protected areas. In this project, using Belgium as a test-case, I will develop an eDNA-based IAS surveillance system that uses information theory to identify sets of sampling sites that will optimally allocate limiting sampling resources to maximise information about the risk of prospective IAS to protected areas. This system can then be used to guide IAS management or further sampling.
+Environmental monitoring always faces the problem of resource limitations. As such, an eDNA-based surveillance system would need to balance resource constraints and be able to collect information in a way that will provide the most possible information about the risk of prospective IAS to protected areas. In this project, using Belgium as a test-case, I will develop an eDNA-based IAS surveillance system that uses information theory and Bayesian modeling to identify sets of sampling sites that will optimally allocate limiting sampling resources to maximise information about the risk of prospective IAS to protected areas. This system can then be used to guide IAS management or further sampling.
 
 I call this project AIRIES (Adaptive Invasion-Risk Intelligence for Protected Areas with eDNA Surveillance) and it is structured around **four measurable, verifiable and achievable R&I objectives**:
 
@@ -28,7 +28,7 @@ I call this project AIRIES (Adaptive Invasion-Risk Intelligence for Protected Ar
 
 + **Target deliverable 2:** Information theory algorithm and a list of locations in Belgium where new information will improve our ability to detect IAS in the Natura 2000 network. This tool will be integrated to the interactive web dashboard from objective 1.
 
-**Objective 3:** Build a metabarcoding reference database for these 50 prospective IAS using genetic databases and targeted field sampling.
+**Objective 3:** Build a metabarcoding reference database for these 50 prospective IAS using genetic databases and targeted sampling.
 
 + **Target deliverable 3:** Curated and publically available metabarcoding reference database for these prospective IAS in Belgium for use in DNA metabarcoding.
 
@@ -36,7 +36,7 @@ I call this project AIRIES (Adaptive Invasion-Risk Intelligence for Protected Ar
 
 + **Target deliverable 4:** eDNA samples from priority sites in Belgium identified in objective 3 and an update to the interactive web dashboard to allow the ingestion of samples from the priority, risk updating and priority site updating.
 
-These four objectives will be addressed as four complementary **work packages (1-4)**. Given my background in biomonitoring, modeling and data science, these objectives are achievable and progress towards them can be clearly measured using the identified target deliverables (1-4). By completing these four objectives, AIRIES would become the first information-theory driven adaptive IAS surveillance system and it would be specifically tailored to safe-guard Europe’s protected area network from the increasing threat of IAS. Therefore, not only will AIRIES deliver novel research, it will deliver a working prototype of a surveillance system that, if successful, could be applied to IAS management across Europe.
+These four objectives will be addressed as four complementary **work packages (1-4)**. Given my background in biomonitoring, modeling and data science, these objectives are achievable and progress towards them can be clearly measured using the identified target deliverables (1-4). By completing these four objectives, AIRIES would become the first information-theory driven adaptive IAS surveillance system and it would be specifically tailored to safeguard Europe’s protected area network from the increasing threat of IAS. Therefore, not only will AIRIES deliver novel research, it will deliver a working prototype of a surveillance system that, if successful, could be applied to IAS management across Europe.
 
 ### 1.2 Soundness of the proposed methodology (including interdisciplinary approaches, consideration of the gender dimension and other diversity aspects if relevant for the research project, and the quality of open science practices).
 
@@ -211,7 +211,7 @@ Overview of the **AIRIES** information theory and optimisation algorithm for sel
 
 #### WP3: Building a metabarcoding reference database for the 50 prospective IAS
 
-Given that, in WP2, we will establish a list of priority sites for eDNA sampling that will provide the maximum amount of information about the risk of the 50 IAS to Belgium's protected areas, the next step is the eDNA sampling. Detecting species using eDNA is typically done using one of two approaches: (1) **quantitative PCR (i.e. qPCR)** or (2) DNA metabarcoding (**metabarcoding**). If one is interested in detecting whether a specific species is present or absent given an eDNA sample, qPCR is typically favoured. However, qPCR requires a separate assay to be developed for each species of interest. In contrast, a more general approach is metabarcoding whereby a short, taxonomically informative DNA region that is flanked by two conservative regions (i.e. primer-pairs) is amplified and sequenced and the sequences are compared against a metabarcoding reference database for taxonomic assignment. The reference database is a set of reference sequences for the target taxa that the obtained sequences can be compared against. Given that, in this project, we are aiming to monitor 50 priority IAS and, therefore, we will use metabarcoding.
+Given that, in WP2, we will establish a list of priority sites for eDNA sampling that will provide the maximum amount of information about the risk of the 50 IAS to Belgium's protected areas, the next step is the eDNA sampling. Detecting species using eDNA is typically done using one of two approaches: (1) **quantitative PCR (i.e. qPCR)** or (2) DNA metabarcoding (**metabarcoding**). If one is interested in detecting whether a specific species is present or absent given an eDNA sample, qPCR is typically favoured. However, qPCR requires a separate assay to be developed for each species of interest. In contrast, a more general approach is metabarcoding whereby a short, taxonomically informative DNA region that is flanked by two conservative regions (i.e. primer-pairs) is amplified and sequenced and the sequences are compared against a metabarcoding reference database for taxonomic assignment. The reference database is a set of reference sequences for the target taxa that the obtained sequences can be compared against. In this project, we are aiming to monitor 50 priority IAS and, therefore, we will use metabarcoding.
 
 Given the established priority sites identified in WP2 for eDNA sampling to maximize detection efficiency of 50 IAS threatening Belgium’s protected areas, WP3 will focus on building a high-quality metabarcoding reference database. This database will substantially enhance the accuracy of species detection from eDNA samples, reducing false-positive matches during taxonomic assignment.
 
@@ -233,7 +233,9 @@ All obtained sequences will undergo stringent bioinformatics quality control ana
 
 The finalized metabarcoding reference database will be formatted for compatibility with established bioinformatics pipelines (e.g., QIIME2) to ensure broad usability and reproducibility and published on a publicly available, data-sharing platform like Figshare, Dryad or Zenodo. Regular updates to the database will be made publicly available, reflecting ongoing data curation and addition of new validated sequences. Whilst this reference database is tailored towards 50 priority IAS for Belgium, these IAS overlap with other European countries and, as aresult, this reference database will likely be broadly applicable for IAS monitoring. This reference database and its publication constitute **target deliverable 3**.
 
-#### WP4: 
+#### WP4: Targeted eDNA sampling of IAS and risk updating
+
+
 
 
 
